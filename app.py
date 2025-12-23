@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 import json
 import plotly.graph_objects as go
 from decimal import Decimal
-from config import Config
 from auth import UserAuth, init_session_state, logout
 
 load_dotenv()
@@ -992,6 +991,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
