@@ -15,43 +15,40 @@ class TravelDatabase:
     """
     Manages PostgreSQL database operations for the Travel Planner application.
     """
-    
     def __init__(self):
         """Initialize with Streamlit secrets (cloud) or environment variables (local)"""
-        # Try Streamlit secrets first (for cloud deployment)
+    
+        # 1️⃣ Try Streamlit Cloud secrets first
         try:
             import streamlit as st
-            if hasattr(st, 'secrets') and 'neon' in st.secrets:
-                self.host = st.secrets["neon"]["host"]
-                self.port = st.secrets["neon"]["port"]
-                self.database = st.secrets["neon"]["database"]
-                self.user = st.secrets["neon"]["user"]
-                self.password = st.secrets["neon"]["password"]
-                self.sslmode = 'require'
-                print("📡 Using Streamlit Cloud secrets for database")
+            if "neon" in st.secrets:
+                cfg = st.secrets["neon"]
+                self.host = cfg["host"]
+                self.port = cfg["port"]
+                self.database = cfg["database"]
+                self.user = cfg["user"]
+                self.password = cfg["password"]
+                self.sslmode = cfg.get("sslmode", "require")
+                print("📡 Using Streamlit Cloud Neon configuration")
             else:
-                raise KeyError("Secrets not found")
-        except (ImportError, KeyError):
-            # Fallback to Config class for local development
-            try:
-                from config import Config
-                db_config = Config.get_database_config()
-                if not db_config:
-                    raise Exception("Database configuration not found")
-                
-                self.host = db_config['host']
-                self.port = db_config['port']
-                self.database = db_config['database']
-                self.user = db_config['user']
-                self.password = db_config['password']
-                self.sslmode = db_config.get('sslmode', 'require')
-                print("💻 Using local configuration for database")
-            except Exception as e:
-                raise Exception(f"Could not load database config: {str(e)}")
-        
+                raise KeyError
+        except Exception:
+            # 2️⃣ Fallback to local .env / environment variables
+            self.host = os.getenv("DB_HOST")
+            self.port = os.getenv("DB_PORT", "5432")
+            self.database = os.getenv("DB_NAME")
+            self.user = os.getenv("DB_USER")
+            self.password = os.getenv("DB_PASSWORD")
+            self.sslmode = os.getenv("DB_SSLMODE", "require")
+            print("💻 Using local environment variables for database")
+    
+        # 3️⃣ Validate configuration
+        if not all([self.host, self.database, self.user, self.password]):
+            raise RuntimeError("❌ Database configuration is incomplete")
+    
         self.conn = None
         self.cursor = None
-        
+    
         self._connect()
         self._create_tables()
         
