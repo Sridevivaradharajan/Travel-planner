@@ -374,4 +374,3 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
 
-SUCCESS: Trip saved to Neon DB! Trip ID: X, User ID: Y
