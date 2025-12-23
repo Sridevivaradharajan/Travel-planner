@@ -1,6 +1,6 @@
 """
-Travel Planning AI Agent - Fixed for PostgreSQL Database
-Optimized for Gemini Flash with correct database methods
+Travel Planning AI Agent - Fixed for LangChain 0.1.0
+Compatible with PostgreSQL Database and Gemini Flash
 """
 import os
 from typing import List, Dict
@@ -8,10 +8,9 @@ from dotenv import load_dotenv
 import json
 
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.agents import AgentExecutor, initialize_agent, AgentType
 from langchain.memory import ConversationBufferMemory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.tools import Tool
+from langchain.tools import Tool
 
 from tenacity import (
     retry, 
@@ -47,13 +46,13 @@ class TravelAgent:
         if DATABASE_AVAILABLE:
             try:
                 self.db = TravelDatabase()
-                print("Database connected")
+                print("✅ Database connected")
             except Exception as e:
-                print(f"Database error: {e}")
+                print(f"❌ Database error: {e}")
         
         # Initialize Gemini Flash
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",  # Using stable model
+            model="gemini-1.5-flash",
             google_api_key=google_api_key,
             temperature=0.7,
             convert_system_message_to_human=True,
@@ -68,8 +67,8 @@ class TravelAgent:
         self.tools = self._create_tools()
         self.agent_executor = self._create_agent()
         
-        print("TravelAgent initialized with Gemini 1.5 Flash")
-        print("Quota: ~1,500 requests/day (Free Tier)")
+        print("✅ TravelAgent initialized with Gemini 1.5 Flash")
+        print("📊 Quota: ~1,500 requests/day (Free Tier)")
     
     def _create_tools(self) -> List[Tool]:
         """Create tools with CORRECT database methods"""
@@ -90,10 +89,11 @@ class TravelAgent:
         return tools
     
     def _create_agent(self) -> AgentExecutor:
-        """Create agent with optimized prompt"""
+        """Create agent using initialize_agent (compatible with LangChain 0.1.0)"""
         
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are Lumina, an expert AI travel planner.
+        # System message for the agent
+        agent_kwargs = {
+            "prefix": """You are Lumina, an expert AI travel planner.
 
 CRITICAL: Use search_all_travel_data tool ONCE to get data, then create a plan.
 
@@ -104,19 +104,18 @@ Your response MUST include:
 4. 💰 BUDGET - Breakdown (flights, hotels, food, transport, total)
 5. 📝 TIPS - 3 helpful travel tips
 
-Format cleanly. Be specific with numbers and names from the data."""),
-            MessagesPlaceholder(variable_name="chat_history", optional=True),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
+Format cleanly. Be specific with numbers and names from the data.""",
+            "format_instructions": "Use the following format:\n\nThought: Think about what to do\nAction: Use a tool if needed\nAction Input: Input for the tool\nObservation: Result from the tool\n... (repeat as needed)\nThought: I now have enough information\nFinal Answer: Your complete response",
+            "suffix": "Begin!\n\nQuestion: {input}\n{agent_scratchpad}"
+        }
         
-        agent = create_tool_calling_agent(self.llm, self.tools, prompt)
-        
-        return AgentExecutor(
-            agent=agent,
+        return initialize_agent(
             tools=self.tools,
-            memory=self.memory,
+            llm=self.llm,
+            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
             verbose=True,
+            memory=self.memory,
+            agent_kwargs=agent_kwargs,
             max_iterations=3,
             max_execution_time=60,
             handle_parsing_errors=True
@@ -268,7 +267,7 @@ if __name__ == "__main__":
     
     try:
         agent = TravelAgent()
-        test_query = "Plan a 3-day moderate trip from Mumbai to Goa for 2 people interested in beaches and food"
+        test_query = "Plan a 3-day moderate trip from Mumbai to Goa for 2 people interested in beaches and food. Use search_all_travel_data: Mumbai|Goa|moderate|beaches,food"
         
         print("\n" + "="*60)
         print("Test Query:", test_query)
