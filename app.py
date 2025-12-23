@@ -266,11 +266,16 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'available_routes' not in st.session_state:
     st.session_state.available_routes = {}
-if COMPONENTS_AVAILABLE and st.session_state.agent and not st.session_state.auth:
+# Initialize auth system separately - FIXED
+if COMPONENTS_AVAILABLE and 'auth' not in st.session_state:
     try:
-        st.session_state.auth = UserAuth(st.session_state.agent.db.conn)
+        from database import TravelDatabase
+        db = TravelDatabase()
+        st.session_state.auth = UserAuth(db.conn)
+        print("Auth system initialized")
     except Exception as e:
-        st.warning(f"Auth initialization: {e}")
+        st.error(f"Auth initialization error: {str(e)}")
+        st.session_state.auth = None
 
 # ===== UTILITY FUNCTIONS - DEFINE BEFORE USE =====
 
@@ -957,3 +962,4 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
