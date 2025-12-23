@@ -34,7 +34,7 @@ class TravelDatabase:
                 self.password = cfg["password"]
                 self.sslmode = cfg.get("sslmode", "require")
 
-                print("📡 Using Streamlit Cloud secrets")
+                print("Using Streamlit Cloud secrets")
 
             except Exception as e:
                 raise RuntimeError(f"Streamlit secrets error: {e}")
@@ -56,7 +56,7 @@ class TravelDatabase:
                     "Check your .env file."
                 )
 
-            print("💻 Using local .env configuration")
+            print("Using local .env configuration")
 
         self.conn = None
         self.cursor = None
@@ -77,7 +77,7 @@ class TravelDatabase:
             connect_timeout=10,
         )
         self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
-        print(f"✅ Connected to PostgreSQL → {self.database}")
+        print(f"Connected to PostgreSQL -> {self.database}")
 
     # ======================================================
     # TABLES
@@ -136,7 +136,7 @@ class TravelDatabase:
         """)
 
         self.conn.commit()
-        print("✅ Tables verified")
+        print("Tables verified")
 
     # ======================================================
     # DATA LOADERS
@@ -187,7 +187,7 @@ class TravelDatabase:
                 self.insert_place(place)
 
         self.conn.commit()
-        print("✅ Data loaded")
+        print("Data loaded")
 
     # ======================================================
     # QUERY METHODS (Required by agent.py)
@@ -284,12 +284,12 @@ class TravelDatabase:
             result = self.cursor.fetchone()
             self.conn.commit()
             
-            print(f"✅ Trip saved to Neon DB! Trip ID: {result['trip_id']}, User ID: {user_id}")
+            print(f"SUCCESS: Trip saved to Neon DB! Trip ID: {result['trip_id']}, User ID: {user_id}")
             return True
             
         except Exception as e:
             self.conn.rollback()
-            print(f"❌ Error saving trip to Neon: {e}")
+            print(f"ERROR: Failed to save trip to Neon: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -340,38 +340,38 @@ class TravelDatabase:
             self.cursor.close()
         if self.conn:
             self.conn.close()
-            print("✅ Database connection closed")
+            print("Database connection closed")
 
 
 # ======================================================
 # TESTING
 # ======================================================
 if __name__ == "__main__":
-    print("🧪 Testing TravelDatabase...")
+    print("Testing TravelDatabase...")
     
     try:
         db = TravelDatabase()
         
         # Test stats
         stats = db.get_database_stats()
-        print(f"\n📊 Database Stats: {stats}")
+        print(f"\nDatabase Stats: {stats}")
         
         # Test queries
         flights = db.get_flights("Mumbai", "Goa", limit=3)
-        print(f"\n✈️ Found {len(flights)} flights Mumbai→Goa")
+        print(f"\nFound {len(flights)} flights Mumbai to Goa")
         
         hotels = db.get_hotels("Goa", min_stars=3, limit=3)
-        print(f"🏨 Found {len(hotels)} hotels in Goa")
+        print(f"Found {len(hotels)} hotels in Goa")
         
         places = db.get_places("Goa", min_rating=4.0, limit=5)
-        print(f"📍 Found {len(places)} places in Goa")
+        print(f"Found {len(places)} places in Goa")
         
         db.close()
-        print("\n✅ All tests passed!")
+        print("\nAll tests passed!")
         
     except Exception as e:
-        print(f"\n❌ Test failed: {e}")
+        print(f"\nTest failed: {e}")
         import traceback
         traceback.print_exc()
 
-✅ Trip saved to Neon DB! Trip ID: X, User ID: Y
+SUCCESS: Trip saved to Neon DB! Trip ID: X, User ID: Y
