@@ -1,6 +1,6 @@
 """
 Lumina Travel Planner - Professional Edition
-Fixed: Decimal/Float errors, removed emojis, improved UI
+Fixed: Function definition order
 """
 import streamlit as st
 from datetime import datetime, timedelta
@@ -272,10 +272,7 @@ if COMPONENTS_AVAILABLE and st.session_state.agent and not st.session_state.auth
     except Exception as e:
         st.warning(f"Auth initialization: {e}")
 
-# Check if user is logged in - show login page if not
-if not st.session_state.logged_in:
-    show_login_page()
-    st.stop()  # Stop execution here if not logged in
+# ===== UTILITY FUNCTIONS - DEFINE BEFORE USE =====
 
 @st.cache_resource
 def init_agent():
@@ -319,13 +316,6 @@ def get_available_routes():
         return {}
     except:
         return {}
-
-if COMPONENTS_AVAILABLE and st.session_state.agent is None:
-    st.session_state.agent = init_agent()
-
-# Load available routes
-if st.session_state.agent and not st.session_state.available_routes:
-    st.session_state.available_routes = get_available_routes()
 
 def safe_float(value):
     """Convert any numeric value to float safely"""
@@ -469,7 +459,22 @@ def show_login_page():
     </div>
     """, unsafe_allow_html=True)
 
-# Sidebar
+# ===== INITIALIZATION =====
+
+if COMPONENTS_AVAILABLE and st.session_state.agent is None:
+    st.session_state.agent = init_agent()
+
+# Load available routes
+if st.session_state.agent and not st.session_state.available_routes:
+    st.session_state.available_routes = get_available_routes()
+
+# ===== LOGIN CHECK - AFTER FUNCTION DEFINITION =====
+# Check if user is logged in - show login page if not
+if not st.session_state.logged_in:
+    show_login_page()
+    st.stop()  # Stop execution here if not logged in
+
+# ===== SIDEBAR =====
 
 with st.sidebar:
     st.markdown('<div class="sidebar-logo"><div class="logo-icon">L</div><div class="logo-text">Lumina</div></div>', unsafe_allow_html=True)
@@ -552,6 +557,8 @@ with st.sidebar:
     if st.button("Logout", key="logout_btn", use_container_width=True, type="secondary"):
         logout()
         st.rerun()
+
+# ===== MAIN PAGES =====
 
 # DASHBOARD PAGE
 if st.session_state.page == 'overview':
@@ -949,5 +956,4 @@ elif st.session_state.page == 'chat':
                 st.session_state.chat_history = []
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
-
                 st.rerun()
