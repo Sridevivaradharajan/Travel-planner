@@ -32,41 +32,43 @@ except ImportError:
 
 
 class TravelAgent:
-    """AI Travel Planning Agent powered by Google Gemini 1.5 Flash"""
-    def __init__(self, google_api_key: str = None):
-        if google_api_key is None:
-            google_api_key = os.getenv("GOOGLE_API_KEY")
-            if not google_api_key:
-                raise ValueError("❌ GOOGLE_API_KEY not found in .env file")
-        
-        # Initialize database
-        self.db = None
-        if DATABASE_AVAILABLE:
-            try:
-                self.db = TravelDatabase()
-                print("✅ Database connected")
-            except Exception as e:
-                print(f"⚠️ Database error: {e}")
-        
-        # Initialize Gemini Flash (CORRECTED MODEL NAME)
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-flash-latest",  # <--- Changed from 2.0-exp to 1.5-flash for stability & quota
-            google_api_key=google_api_key,
-            temperature=0.7,
-            convert_system_message_to_human=True,
-            max_retries=2
-        )
-        
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
-        
-        self.tools = self._create_tools()
-        self.agent_executor = self._create_agent()
-        
-        print("✅ TravelAgent initialized with Gemini 1.5 Flash")
-        print("ℹ️  Quota: ~1,500 requests/day (Free Tier)")
+    """AI Travel Planning Agent powered by Google Gemini 1.5 Flash"""     
+       def __init__(self, google_api_key: str = None):
+            """Initialize agent with cloud configuration support"""
+            if google_api_key is None:
+                from config import Config
+                google_api_key = Config.get_google_api_key()
+                if not google_api_key:
+                    raise ValueError("GOOGLE_API_KEY not found in configuration")
+            
+            # Initialize database
+            self.db = None
+            if DATABASE_AVAILABLE:
+                try:
+                    self.db = TravelDatabase()
+                    print("Database connected")
+                except Exception as e:
+                    print(f"Database error: {e}")
+            
+            # Initialize Gemini Flash
+            self.llm = ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",  # Using stable model
+                google_api_key=google_api_key,
+                temperature=0.7,
+                convert_system_message_to_human=True,
+                max_retries=2
+            )
+            
+            self.memory = ConversationBufferMemory(
+                memory_key="chat_history",
+                return_messages=True
+            )
+            
+            self.tools = self._create_tools()
+            self.agent_executor = self._create_agent()
+            
+            print("TravelAgent initialized with Gemini 1.5 Flash")
+            print("Quota: ~1,500 requests/day (Free Tier)")
     
     def _create_tools(self) -> List[Tool]:
         """Create tools with CORRECT database methods"""
@@ -276,4 +278,5 @@ if __name__ == "__main__":
         print(response)
         
     except Exception as e:
+
         print(f"❌ Error: {e}")
