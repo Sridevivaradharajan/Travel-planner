@@ -267,15 +267,36 @@ if 'chat_history' not in st.session_state:
 if 'available_routes' not in st.session_state:
     st.session_state.available_routes = {}
 # Initialize auth system separately - FIXED
-if COMPONENTS_AVAILABLE and 'auth' not in st.session_state:
-    try:
-        from database import TravelDatabase
-        db = TravelDatabase()
-        st.session_state.auth = UserAuth(db.conn)
-        print("Auth system initialized")
-    except Exception as e:
-        st.error(f"Auth initialization error: {str(e)}")
-        st.session_state.auth = None
+if 'auth' not in st.session_state:
+    st.session_state.auth = None
+    if COMPONENTS_AVAILABLE:
+        try:
+            from database import TravelDatabase
+            from auth import UserAuth
+            db = TravelDatabase()
+            if db and db.conn:
+                st.session_state.auth = UserAuth(db.conn)
+                print("Auth system initialized successfully")
+            else:
+                print("Database connection failed")
+        except Exception as e:
+            print(f"Auth initialization error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+if submit:
+    if not email or not password:
+        st.error("Please fill in all fields")
+    elif st.session_state.auth is None:
+        st.error("Authentication system not available. Please check:")
+        st.markdown("""
+        - Database connection status
+        - `auth.py` module exists
+        - `UserAuth` class is properly defined
+        - Database tables are created
+        """)
+        if st.button("Show Debug Info"):
+            st.code(f"COMPONENTS_AVAILABLE: {COMPONENTS_AVAILABLE}")
+            st.code(f"auth object: {st.session_state.auth}")
 
 # ===== UTILITY FUNCTIONS - DEFINE BEFORE USE =====
 
@@ -962,4 +983,5 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
