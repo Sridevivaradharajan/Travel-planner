@@ -424,52 +424,75 @@ def show_login_page():
     
     with tab1:
         st.markdown("### Login to Your Account")
-        with st.form("login_form"):
-            email = st.text_input("Email or Username", placeholder="Enter your email or username")
-            password = st.text_input("Password", type="password", placeholder="Enter your password")
-            submit = st.form_submit_button("Login", use_container_width=True)
-            
-            if submit:
-                if not email or not password:
-                    st.error("Please fill in all fields")
-                elif not st.session_state.auth:
-                    st.error("Authentication system not available. Please contact support.")
-                else:
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input("Email or Username", placeholder="Enter your email or username", key="login_email")
+            password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_pass")
+            login_submit = st.form_submit_button("Login", use_container_width=True)
+        
+        # Handle login OUTSIDE the form context
+        if login_submit:
+            if not email or not password:
+                st.error("Please fill in all fields")
+            elif st.session_state.auth is None:
+                st.error("Authentication system not available. Please check:")
+                with st.expander("Show Debug Info"):
+                    st.markdown("""
+                    **Possible issues:**
+                    - Database connection failed
+                    - `auth.py` module missing
+                    - `UserAuth` class error
+                    - Database tables not created
+                    
+                    **Please check your terminal/logs for detailed error messages.**
+                    """)
+            else:
+                with st.spinner("Logging in..."):
                     user = st.session_state.auth.login(email, password)
                     if user:
                         st.session_state.logged_in = True
                         st.session_state.user = user
                         st.success(f"Welcome back, {user['full_name'] or user['username']}!")
+                        st.balloons()
                         st.rerun()
                     else:
                         st.error("Invalid credentials. Please try again.")
     
     with tab2:
         st.markdown("### Create New Account")
-        with st.form("signup_form"):
-            full_name = st.text_input("Full Name", placeholder="Enter your full name")
-            username = st.text_input("Username", placeholder="Choose a username")
-            email = st.text_input("Email", placeholder="Enter your email")
+        with st.form("signup_form", clear_on_submit=False):
+            full_name = st.text_input("Full Name", placeholder="Enter your full name", key="signup_name")
+            username = st.text_input("Username", placeholder="Choose a username", key="signup_user")
+            email = st.text_input("Email", placeholder="Enter your email", key="signup_email")
             col1, col2 = st.columns(2)
             with col1:
-                password = st.text_input("Password", type="password", placeholder="Minimum 6 characters")
+                password = st.text_input("Password", type="password", placeholder="Minimum 6 characters", key="signup_pass")
             with col2:
-                confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter password")
+                confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter password", key="signup_confirm")
             
-            submit = st.form_submit_button("Sign Up", use_container_width=True)
-            
-            if submit:
-                if not all([full_name, username, email, password, confirm]):
-                    st.error("Please fill in all fields")
-                elif password != confirm:
-                    st.error("Passwords don't match")
-                elif len(password) < 6:
-                    st.error("Password must be at least 6 characters")
-                elif '@' not in email:
-                    st.error("Invalid email format")
-                elif not st.session_state.auth:
-                    st.error("Authentication system not available")
-                else:
+            signup_submit = st.form_submit_button("Sign Up", use_container_width=True)
+        
+        # Handle signup OUTSIDE the form context
+        if signup_submit:
+            if not all([full_name, username, email, password, confirm]):
+                st.error("Please fill in all fields")
+            elif password != confirm:
+                st.error("Passwords don't match")
+            elif len(password) < 6:
+                st.error("Password must be at least 6 characters")
+            elif '@' not in email:
+                st.error("Invalid email format")
+            elif st.session_state.auth is None:
+                st.error("Authentication system not available")
+                with st.expander("Show Debug Info"):
+                    st.markdown("""
+                    **Possible issues:**
+                    - Database connection failed
+                    - Auth system not initialized
+                    
+                    **Please check your terminal/logs for detailed error messages.**
+                    """)
+            else:
+                with st.spinner("Creating account..."):
                     success, message = st.session_state.auth.register(username, email, password, full_name)
                     if success:
                         st.success("Account created successfully! Please login.")
@@ -983,5 +1006,6 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
