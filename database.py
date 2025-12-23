@@ -1,6 +1,7 @@
 """
 PostgreSQL Database Integration for Travel Planner
 Handles data storage, retrieval, and user trip history using PostgreSQL
+Works with Streamlit Cloud secrets AND local environment
 """
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -16,26 +17,43 @@ class TravelDatabase:
     """
     
     def __init__(self):
-        """Initialize with cloud configuration"""
-        from config import Config
-        
-        db_config = Config.get_database_config()
-        if not db_config:
-            raise Exception("Database configuration not found")
-        
-        self.host = db_config['host']
-        self.port = db_config['port']
-        self.database = db_config['database']
-        self.user = db_config['user']
-        self.password = db_config['password']
-        self.sslmode = db_config.get('sslmode', 'require')
+        """Initialize with Streamlit secrets (cloud) or environment variables (local)"""
+        # Try Streamlit secrets first (for cloud deployment)
+        try:
+            import streamlit as st
+            if hasattr(st, 'secrets') and 'neon' in st.secrets:
+                self.host = st.secrets["neon"]["host"]
+                self.port = st.secrets["neon"]["port"]
+                self.database = st.secrets["neon"]["database"]
+                self.user = st.secrets["neon"]["user"]
+                self.password = st.secrets["neon"]["password"]
+                self.sslmode = 'require'
+                print("📡 Using Streamlit Cloud secrets for database")
+            else:
+                raise KeyError("Secrets not found")
+        except (ImportError, KeyError):
+            # Fallback to Config class for local development
+            try:
+                from config import Config
+                db_config = Config.get_database_config()
+                if not db_config:
+                    raise Exception("Database configuration not found")
+                
+                self.host = db_config['host']
+                self.port = db_config['port']
+                self.database = db_config['database']
+                self.user = db_config['user']
+                self.password = db_config['password']
+                self.sslmode = db_config.get('sslmode', 'require')
+                print("💻 Using local configuration for database")
+            except Exception as e:
+                raise Exception(f"Could not load database config: {str(e)}")
         
         self.conn = None
         self.cursor = None
         
         self._connect()
         self._create_tables()
-
         
     def _connect(self):
         """Establish PostgreSQL database connection with SSL for cloud"""
@@ -46,18 +64,27 @@ class TravelDatabase:
                 database=self.database,
                 user=self.user,
                 password=self.password,
-                sslmode=self.sslmode  # Added for cloud support
+                sslmode=self.sslmode,
+                connect_timeout=10  # Add timeout
             )
             self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
-            print(f"Connected to PostgreSQL database: {self.database}")
-        except psycopg2.Error as e:
+            print(f"✅ Connected to PostgreSQL database: {self.database}")
+        except psycopg2.OperationalError as e:
+            print(f"❌ Database connection failed!")
+            print(f"Host: {self.host}")
+            print(f"Port: {self.port}")
+            print(f"Database: {self.database}")
+            print(f"User: {self.user}")
+            print(f"Error: {str(e)}")
             raise Exception(f"PostgreSQL connection error: {str(e)}\n"
-                          f"Make sure database exists and credentials are correct.")
+                          f"Check your database credentials and network connection.")
+        except Exception as e:
+            raise Exception(f"Unexpected database error: {str(e)}")
     
     def _create_tables(self):
         """Create database tables"""
         try:
-            # Flights table - matching your JSON structure
+            # Flights table
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS flights (
                     id SERIAL PRIMARY KEY,
@@ -72,7 +99,7 @@ class TravelDatabase:
                 )
             """)
             
-            # Hotels table - matching your JSON structure
+            # Hotels table
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS hotels (
                     id SERIAL PRIMARY KEY,
@@ -86,7 +113,7 @@ class TravelDatabase:
                 )
             """)
             
-            # Places table - matching your JSON structure
+            # Places table
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS places (
                     id SERIAL PRIMARY KEY,
@@ -99,25 +126,11 @@ class TravelDatabase:
                 )
             """)
             
-            # User preferences table
-            self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS user_preferences (
-                    pref_id SERIAL PRIMARY KEY,
-                    user_id VARCHAR(100) DEFAULT 'default_user',
-                    interests TEXT,
-                    budget_level VARCHAR(50),
-                    preferred_amenities TEXT,
-                    trip_type VARCHAR(50),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Trip history table
+            # Trip history table - UPDATED to use INTEGER user_id
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS trip_history (
                     trip_id SERIAL PRIMARY KEY,
-                    user_id VARCHAR(100) DEFAULT 'default_user',
+                    user_id INTEGER NOT NULL,
                     source_city VARCHAR(100) NOT NULL,
                     destination_city VARCHAR(100) NOT NULL,
                     start_date DATE NOT NULL,
@@ -132,7 +145,7 @@ class TravelDatabase:
                 )
             """)
             
-            # Create indexes for better query performance
+            # Create indexes
             self.cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_flights_route 
                 ON flights(from_city, to_city, price)
@@ -148,12 +161,17 @@ class TravelDatabase:
                 ON places(city, type, rating)
             """)
             
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_trip_user 
+                ON trip_history(user_id, created_at DESC)
+            """)
+            
             self.conn.commit()
             print("✅ Database tables created/verified successfully")
             
         except psycopg2.Error as e:
             self.conn.rollback()
-            raise Exception(f"Error creating tables: {str(e)}")
+            print(f"⚠️ Error creating tables: {str(e)}")
     
     def load_json_data_to_db(self, flights_file: str, hotels_file: str, places_file: str):
         """Load data from JSON files into PostgreSQL database"""
@@ -192,7 +210,7 @@ class TravelDatabase:
             
         except Exception as e:
             self.conn.rollback()
-            raise Exception(f"Error loading JSON data: {str(e)}")
+            print(f"❌ Error loading JSON data: {str(e)}")
     
     def insert_flight(self, flight_data: Dict) -> Optional[int]:
         """Insert flight data into database"""
@@ -217,13 +235,12 @@ class TravelDatabase:
             return result['id'] if result else None
             
         except psycopg2.Error as e:
-            print(f"Error inserting flight {flight_data.get('flight_id')}: {str(e)}")
+            print(f"Error inserting flight: {str(e)}")
             return None
     
     def insert_hotel(self, hotel_data: Dict) -> Optional[int]:
         """Insert hotel data into database"""
         try:
-            # Convert amenities list to JSON string
             amenities_str = json.dumps(hotel_data.get('amenities', []))
             
             self.cursor.execute("""
@@ -245,7 +262,7 @@ class TravelDatabase:
             return result['id'] if result else None
             
         except psycopg2.Error as e:
-            print(f"Error inserting hotel {hotel_data.get('hotel_id')}: {str(e)}")
+            print(f"Error inserting hotel: {str(e)}")
             return None
     
     def insert_place(self, place_data: Dict) -> Optional[int]:
@@ -269,7 +286,7 @@ class TravelDatabase:
             return result['id'] if result else None
             
         except psycopg2.Error as e:
-            print(f"Error inserting place {place_data.get('place_id')}: {str(e)}")
+            print(f"Error inserting place: {str(e)}")
             return None
     
     def get_flights(self, source: str, destination: str, 
@@ -332,7 +349,6 @@ class TravelDatabase:
                     except:
                         hotel_amenities = []
                     
-                    # Check if any requested amenity is in hotel amenities
                     if any(amenity.strip().lower() in [a.strip().lower() 
                            for a in hotel_amenities] for amenity in amenities):
                         filtered_hotels.append(hotel)
@@ -370,8 +386,8 @@ class TravelDatabase:
             print(f"Error querying places: {str(e)}")
             return []
     
-    def save_trip_history(self, trip_data: Dict) -> Optional[int]:
-        """Save generated trip to history"""
+    def save_user_trip(self, user_id: int, trip_data: Dict) -> Optional[int]:
+        """Save trip for specific user"""
         try:
             self.cursor.execute("""
                 INSERT INTO trip_history 
@@ -380,7 +396,7 @@ class TravelDatabase:
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING trip_id
             """, (
-                trip_data.get('user_id', 'default_user'),
+                user_id,
                 trip_data.get('source_city'),
                 trip_data.get('destination_city'),
                 trip_data.get('start_date'),
@@ -397,12 +413,11 @@ class TravelDatabase:
             
         except psycopg2.Error as e:
             self.conn.rollback()
-            print(f"Error saving trip history: {str(e)}")
+            print(f"Error saving user trip: {str(e)}")
             return None
     
-    def get_trip_history(self, user_id: str = 'default_user', 
-                        limit: int = 10) -> List[Dict]:
-        """Retrieve user's trip history"""
+    def get_user_trips(self, user_id: int, limit: int = 10) -> List[Dict]:
+        """Get trips for specific user"""
         try:
             self.cursor.execute("""
                 SELECT * FROM trip_history 
@@ -415,7 +430,7 @@ class TravelDatabase:
             return [dict(row) for row in rows]
             
         except psycopg2.Error as e:
-            print(f"Error retrieving trip history: {str(e)}")
+            print(f"Error retrieving user trips: {str(e)}")
             return []
     
     def get_database_stats(self) -> Dict:
@@ -443,53 +458,6 @@ class TravelDatabase:
         except psycopg2.Error as e:
             print(f"Error getting stats: {str(e)}")
             return {}
-
-    def get_user_trips(self, user_id: int, limit: int = 10) -> List[Dict]:
-        """Get trips for specific user"""
-        try:
-            self.cursor.execute("""
-                SELECT * FROM trip_history 
-                WHERE user_id = %s
-                ORDER BY created_at DESC
-                LIMIT %s
-            """, (user_id, limit))
-            
-            rows = self.cursor.fetchall()
-            return [dict(row) for row in rows]
-            
-        except psycopg2.Error as e:
-            print(f"Error retrieving user trips: {str(e)}")
-            return []
-    
-    def save_user_trip(self, user_id: int, trip_data: Dict) -> Optional[int]:
-        """Save trip for specific user"""
-        try:
-            self.cursor.execute("""
-                INSERT INTO trip_history 
-                (user_id, source_city, destination_city, start_date, end_date,
-                 duration_days, total_budget, itinerary_json, agent_response)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING trip_id
-            """, (
-                user_id,  # Use actual user_id instead of string
-                trip_data.get('source_city'),
-                trip_data.get('destination_city'),
-                trip_data.get('start_date'),
-                trip_data.get('end_date'),
-                trip_data.get('duration_days'),
-                trip_data.get('total_budget'),
-                json.dumps(trip_data.get('itinerary', {})),
-                trip_data.get('agent_response', '')
-            ))
-            
-            self.conn.commit()
-            result = self.cursor.fetchone()
-            return result['trip_id'] if result else None
-            
-        except psycopg2.Error as e:
-            self.conn.rollback()
-            print(f"Error saving user trip: {str(e)}")
-            return None
         
     def close(self):
         """Close database connection"""
@@ -501,88 +469,11 @@ class TravelDatabase:
     
     def __del__(self):
         """Destructor to ensure connection is closed"""
-        self.close()
+        try:
+            self.close()
+        except:
+            pass
 
 
-# Example usage and testing
 if __name__ == "__main__":
-    # Initialize database
-    print("=" * 60)
-    print("🚀 PostgreSQL Travel Planner Database Setup")
-    print("=" * 60)
-    
-    try:
-        db = TravelDatabase(
-            host="localhost",
-            port=5432,
-            database="travel_planner",
-            user="postgres",
-            password="Srisql@8"  # Change this to your password
-        )
-        
-        # Load data from JSON files
-        print("\n📥 Loading data into database...")
-        db.load_json_data_to_db(
-            'data/flights.json',
-            'data/hotels.json', 
-            'data/places.json'
-        )
-        
-        # Get statistics
-        print("\n" + "=" * 60)
-        stats = db.get_database_stats()
-        print("📊 Database Statistics:")
-        print(f"  ✈️  Flights: {stats.get('total_flights', 0)}")
-        print(f"  🏨  Hotels: {stats.get('total_hotels', 0)}")
-        print(f"  🗺️  Places: {stats.get('total_places', 0)}")
-        print(f"  🌆  Cities: {stats.get('total_cities', 0)}")
-        print(f"  📝  Saved Trips: {stats.get('total_trips', 0)}")
-        
-        # Test queries
-        print("\n" + "=" * 60)
-        print("🔍 Testing database queries...")
-        print("=" * 60)
-        
-        print("\n✈️  Sample Flight Query (Delhi to Kolkata):")
-        flights = db.get_flights('Delhi', 'Kolkata', limit=3)
-        if flights:
-            for i, flight in enumerate(flights, 1):
-                print(f"   {i}. {flight['airline']} - ₹{flight['price']} "
-                      f"({flight['from_city']} → {flight['to_city']})")
-        else:
-            print("   No flights found")
-        
-        print("\n🏨  Sample Hotel Query (Goa):")
-        hotels = db.get_hotels('Goa', min_stars=3, limit=3)
-        if hotels:
-            for i, hotel in enumerate(hotels, 1):
-                amenities = json.loads(hotel['amenities'])
-                print(f"   {i}. {hotel['name']} - ₹{hotel['price_per_night']}/night - {hotel['stars']}⭐")
-                print(f"      Amenities: {', '.join(amenities)}")
-        else:
-            print("   No hotels found")
-        
-        print("\n🗺️  Sample Places Query (Delhi):")
-        places = db.get_places('Delhi', min_rating=4.0, limit=3)
-        if places:
-            for i, place in enumerate(places, 1):
-                print(f"   {i}. {place['name']} - {place['type']} - {place['rating']}⭐")
-        else:
-            print("   No places found")
-        
-        print("\n" + "=" * 60)
-        print("✅ Database setup and testing complete!")
-        print("=" * 60)
-        print("\n🚀 You can now run your Streamlit app:")
-        print("   streamlit run app_with_sql.py")
-        
-        db.close()
-        
-    except Exception as e:
-        print(f"\n❌ Error: {str(e)}")
-        print("\n💡 Troubleshooting:")
-        print("   1. Make sure PostgreSQL is installed and running")
-        print("   2. Create the database: psql -U postgres -c 'CREATE DATABASE travel_planner;'")
-        print("   3. Check your credentials (host, port, user, password)")
-
-        print("   4. Make sure data files exist in 'data/' folder")
+    print("✅ Database module loaded successfully")
