@@ -272,7 +272,15 @@ if 'auth' not in st.session_state:
         try:
             from database import TravelDatabase
             from auth import UserAuth
-            db = TravelDatabase()
+            @st.cache_resource
+            def get_db():
+                db = TravelDatabase()
+                db.connect()
+                db.ensure_tables()
+                return db
+            
+            db = get_db()
+            
             if db and db.conn:
                 st.session_state.auth = UserAuth(db.conn)
                 print("Auth system initialized successfully")
@@ -991,6 +999,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
