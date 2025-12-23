@@ -265,6 +265,13 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'available_routes' not in st.session_state:
     st.session_state.available_routes = {}
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
+if 'user' not in st.session_state:
+    st.session_state.user = None
+
+# Initialize auth system separately - FIXED
 # Initialize auth system separately - FIXED
 if 'auth' not in st.session_state:
     st.session_state.auth = None
@@ -272,12 +279,10 @@ if 'auth' not in st.session_state:
         try:
             from database import TravelDatabase
             from auth import UserAuth
+
             @st.cache_resource
             def get_db():
-                db = TravelDatabase()
-                db.connect()
-                db.ensure_tables()
-                return db
+                return TravelDatabase()
             
             db = get_db()
             
@@ -286,12 +291,12 @@ if 'auth' not in st.session_state:
                 print("Auth system initialized successfully")
             else:
                 print("Database connection failed")
+
         except Exception as e:
             print(f"Auth initialization error: {str(e)}")
             import traceback
             traceback.print_exc()
 
-# ===== UTILITY FUNCTIONS - DEFINE BEFORE USE =====
 
 @st.cache_resource
 def init_agent():
@@ -999,6 +1004,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
