@@ -190,6 +190,125 @@ class TravelDatabase:
         print("✅ Data loaded")
 
     # ======================================================
+    # QUERY METHODS (Required by agent.py)
+    # ======================================================
+    def get_flights(self, from_city: str, to_city: str, limit: int = 10) -> List[Dict]:
+        """Get flights between two cities"""
+        try:
+            self.cursor.execute("""
+                SELECT * FROM flights 
+                WHERE LOWER(from_city) = LOWER(%s) 
+                AND LOWER(to_city) = LOWER(%s)
+                ORDER BY price ASC
+                LIMIT %s
+            """, (from_city, to_city, limit))
+            return [dict(row) for row in self.cursor.fetchall()]
+        except Exception as e:
+            print(f"Error fetching flights: {e}")
+            return []
+
+    def get_hotels(self, city: str, min_stars: int = 0, max_price: float = None, limit: int = 10) -> List[Dict]:
+        """Get hotels in a city"""
+        try:
+            query = """
+                SELECT * FROM hotels 
+                WHERE LOWER(city) = LOWER(%s)
+                AND stars >= %s
+            """
+            params = [city, min_stars]
+            
+            if max_price:
+                query += " AND price_per_night <= %s"
+                params.append(max_price)
+            
+            query += " ORDER BY stars DESC, price_per_night ASC LIMIT %s"
+            params.append(limit)
+            
+            self.cursor.execute(query, params)
+            return [dict(row) for row in self.cursor.fetchall()]
+        except Exception as e:
+            print(f"Error fetching hotels: {e}")
+            return []
+
+    def get_places(self, city: str, min_rating: float = 0, limit: int = 20) -> List[Dict]:
+        """Get tourist places in a city"""
+        try:
+            self.cursor.execute("""
+                SELECT * FROM places 
+                WHERE LOWER(city) = LOWER(%s)
+                AND rating >= %s
+                ORDER BY rating DESC
+                LIMIT %s
+            """, (city, min_rating, limit))
+            return [dict(row) for row in self.cursor.fetchall()]
+        except Exception as e:
+            print(f"Error fetching places: {e}")
+            return []
+
+    # ======================================================
+    # TRIP HISTORY - SAVE TO NEON DB
+    # ======================================================
+    def save_user_trip(self, user_id: int, trip_data: dict) -> bool:
+        """
+        Save trip to trip_history table in Neon DB
+        """
+        try:
+            # Convert itinerary dict to JSON string
+            itinerary_json = json.dumps(trip_data.get('itinerary')) if trip_data.get('itinerary') else None
+            
+            self.cursor.execute("""
+                INSERT INTO trip_history (
+                    user_id, 
+                    source_city, 
+                    destination_city, 
+                    start_date, 
+                    end_date, 
+                    duration_days, 
+                    total_budget, 
+                    itinerary_json, 
+                    agent_response
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING trip_id
+            """, (
+                user_id,
+                trip_data.get('source_city'),
+                trip_data.get('destination_city'),
+                trip_data.get('start_date'),
+                trip_data.get('end_date'),
+                trip_data.get('duration_days'),
+                trip_data.get('total_budget'),
+                itinerary_json,
+                trip_data.get('agent_response')
+            ))
+            
+            result = self.cursor.fetchone()
+            self.conn.commit()
+            
+            print(f"✅ Trip saved to Neon DB! Trip ID: {result['trip_id']}, User ID: {user_id}")
+            return True
+            
+        except Exception as e:
+            self.conn.rollback()
+            print(f"❌ Error saving trip to Neon: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def get_user_trips(self, user_id: int, limit: int = 10) -> List[Dict]:
+        """Get all trips for a user"""
+        try:
+            self.cursor.execute("""
+                SELECT * FROM trip_history 
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (user_id, limit))
+            return [dict(row) for row in self.cursor.fetchall()]
+        except Exception as e:
+            print(f"Error fetching user trips: {e}")
+            return []
+
+    # ======================================================
     # DATABASE STATS
     # ======================================================
     def get_database_stats(self) -> Dict:
@@ -222,3 +341,37 @@ class TravelDatabase:
         if self.conn:
             self.conn.close()
             print("✅ Database connection closed")
+
+
+# ======================================================
+# TESTING
+# ======================================================
+if __name__ == "__main__":
+    print("🧪 Testing TravelDatabase...")
+    
+    try:
+        db = TravelDatabase()
+        
+        # Test stats
+        stats = db.get_database_stats()
+        print(f"\n📊 Database Stats: {stats}")
+        
+        # Test queries
+        flights = db.get_flights("Mumbai", "Goa", limit=3)
+        print(f"\n✈️ Found {len(flights)} flights Mumbai→Goa")
+        
+        hotels = db.get_hotels("Goa", min_stars=3, limit=3)
+        print(f"🏨 Found {len(hotels)} hotels in Goa")
+        
+        places = db.get_places("Goa", min_rating=4.0, limit=5)
+        print(f"📍 Found {len(places)} places in Goa")
+        
+        db.close()
+        print("\n✅ All tests passed!")
+        
+    except Exception as e:
+        print(f"\n❌ Test failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+✅ Trip saved to Neon DB! Trip ID: X, User ID: Y
