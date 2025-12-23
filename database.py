@@ -15,40 +15,44 @@ class TravelDatabase:
     Manages PostgreSQL database operations for the Travel Planner application.
     """
     
-    def __init__(self, 
-                 host: str = "localhost",
-                 port: int = 5432,
-                 database: str = "travel_planner",
-                 user: str = "postgres",
-                 password: str = "Srisql@8"):
-        """Initialize PostgreSQL database connection"""
-        self.host = host
-        self.port = port
-        self.database = database
-        self.user = user
-        self.password = password
+    def __init__(self):
+        """Initialize with cloud configuration"""
+        from config import Config
+        
+        db_config = Config.get_database_config()
+        if not db_config:
+            raise Exception("Database configuration not found")
+        
+        self.host = db_config['host']
+        self.port = db_config['port']
+        self.database = db_config['database']
+        self.user = db_config['user']
+        self.password = db_config['password']
+        self.sslmode = db_config.get('sslmode', 'require')
+        
         self.conn = None
         self.cursor = None
         
         self._connect()
         self._create_tables()
+
         
     def _connect(self):
-        """Establish PostgreSQL database connection"""
+        """Establish PostgreSQL database connection with SSL for cloud"""
         try:
             self.conn = psycopg2.connect(
                 host=self.host,
                 port=self.port,
                 database=self.database,
                 user=self.user,
-                password=self.password
+                password=self.password,
+                sslmode=self.sslmode  # Added for cloud support
             )
             self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
-            print(f"✅ Connected to PostgreSQL database: {self.database}")
+            print(f"Connected to PostgreSQL database: {self.database}")
         except psycopg2.Error as e:
             raise Exception(f"PostgreSQL connection error: {str(e)}\n"
-                          f"Make sure PostgreSQL is running and database '{self.database}' exists.\n"
-                          f"Create it with: CREATE DATABASE {self.database};")
+                          f"Make sure database exists and credentials are correct.")
     
     def _create_tables(self):
         """Create database tables"""
@@ -439,14 +443,61 @@ class TravelDatabase:
         except psycopg2.Error as e:
             print(f"Error getting stats: {str(e)}")
             return {}
+
+    def get_user_trips(self, user_id: int, limit: int = 10) -> List[Dict]:
+        """Get trips for specific user"""
+        try:
+            self.cursor.execute("""
+                SELECT * FROM trip_history 
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (user_id, limit))
+            
+            rows = self.cursor.fetchall()
+            return [dict(row) for row in rows]
+            
+        except psycopg2.Error as e:
+            print(f"Error retrieving user trips: {str(e)}")
+            return []
     
+    def save_user_trip(self, user_id: int, trip_data: Dict) -> Optional[int]:
+        """Save trip for specific user"""
+        try:
+            self.cursor.execute("""
+                INSERT INTO trip_history 
+                (user_id, source_city, destination_city, start_date, end_date,
+                 duration_days, total_budget, itinerary_json, agent_response)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING trip_id
+            """, (
+                user_id,  # Use actual user_id instead of string
+                trip_data.get('source_city'),
+                trip_data.get('destination_city'),
+                trip_data.get('start_date'),
+                trip_data.get('end_date'),
+                trip_data.get('duration_days'),
+                trip_data.get('total_budget'),
+                json.dumps(trip_data.get('itinerary', {})),
+                trip_data.get('agent_response', '')
+            ))
+            
+            self.conn.commit()
+            result = self.cursor.fetchone()
+            return result['trip_id'] if result else None
+            
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Error saving user trip: {str(e)}")
+            return None
+        
     def close(self):
         """Close database connection"""
         if self.cursor:
             self.cursor.close()
         if self.conn:
             self.conn.close()
-            print("✅ Database connection closed")
+            print("Database connection closed")
     
     def __del__(self):
         """Destructor to ensure connection is closed"""
@@ -533,4 +584,5 @@ if __name__ == "__main__":
         print("   1. Make sure PostgreSQL is installed and running")
         print("   2. Create the database: psql -U postgres -c 'CREATE DATABASE travel_planner;'")
         print("   3. Check your credentials (host, port, user, password)")
+
         print("   4. Make sure data files exist in 'data/' folder")
