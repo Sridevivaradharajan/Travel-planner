@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 import json
 import plotly.graph_objects as go
 from decimal import Decimal
+from config import Config
+from auth import UserAuth, init_session_state, logout
 
 load_dotenv()
 
@@ -18,6 +20,7 @@ st.set_page_config(
     layout="wide", 
     initial_sidebar_state="expanded"
 )
+init_session_state()
 
 try:
     from database import TravelDatabase
@@ -263,6 +266,16 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'available_routes' not in st.session_state:
     st.session_state.available_routes = {}
+if COMPONENTS_AVAILABLE and st.session_state.agent and not st.session_state.auth:
+    try:
+        st.session_state.auth = UserAuth(st.session_state.agent.db.conn)
+    except Exception as e:
+        st.warning(f"Auth initialization: {e}")
+
+# Check if user is logged in - show login page if not
+if not st.session_state.logged_in:
+    show_login_page()
+    st.stop()  # Stop execution here if not logged in
 
 @st.cache_resource
 def init_agent():
@@ -382,31 +395,147 @@ def create_budget_chart(flight_cost, hotel_cost, food_cost, transport_cost):
     
     return fig
 
+def show_login_page():
+    """Display login and signup page"""
+    st.markdown("""
+    <div class="hero-card">
+        <h1>Welcome to Lumina Travel Planner</h1>
+        <p>Sign in to start planning your next adventure</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["Login", "Sign Up"])
+    
+    with tab1:
+        st.markdown("### Login to Your Account")
+        with st.form("login_form"):
+            email = st.text_input("Email or Username", placeholder="Enter your email or username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            submit = st.form_submit_button("Login", use_container_width=True)
+            
+            if submit:
+                if not email or not password:
+                    st.error("Please fill in all fields")
+                elif not st.session_state.auth:
+                    st.error("Authentication system not available. Please contact support.")
+                else:
+                    user = st.session_state.auth.login(email, password)
+                    if user:
+                        st.session_state.logged_in = True
+                        st.session_state.user = user
+                        st.success(f"Welcome back, {user['full_name'] or user['username']}!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials. Please try again.")
+    
+    with tab2:
+        st.markdown("### Create New Account")
+        with st.form("signup_form"):
+            full_name = st.text_input("Full Name", placeholder="Enter your full name")
+            username = st.text_input("Username", placeholder="Choose a username")
+            email = st.text_input("Email", placeholder="Enter your email")
+            col1, col2 = st.columns(2)
+            with col1:
+                password = st.text_input("Password", type="password", placeholder="Minimum 6 characters")
+            with col2:
+                confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter password")
+            
+            submit = st.form_submit_button("Sign Up", use_container_width=True)
+            
+            if submit:
+                if not all([full_name, username, email, password, confirm]):
+                    st.error("Please fill in all fields")
+                elif password != confirm:
+                    st.error("Passwords don't match")
+                elif len(password) < 6:
+                    st.error("Password must be at least 6 characters")
+                elif '@' not in email:
+                    st.error("Invalid email format")
+                elif not st.session_state.auth:
+                    st.error("Authentication system not available")
+                else:
+                    success, message = st.session_state.auth.register(username, email, password, full_name)
+                    if success:
+                        st.success("Account created successfully! Please login.")
+                        st.balloons()
+                    else:
+                        st.error(f"{message}")
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #64748b; padding: 1rem;">
+        <small>By signing up, you agree to our Terms of Service and Privacy Policy</small>
+    </div>
+    """, unsafe_allow_html=True)
+
 # Sidebar
+
 with st.sidebar:
     st.markdown('<div class="sidebar-logo"><div class="logo-icon">L</div><div class="logo-text">Lumina</div></div>', unsafe_allow_html=True)
     
+    # User Profile Section
+    if st.session_state.user:
+        st.markdown(f"""
+        <div style="padding: 1rem; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); 
+                    border-radius: 10px; margin-bottom: 1rem; border: 1px solid #bfdbfe;">
+            <div style="font-weight: 700; font-size: 1rem; color: #1e40af; margin-bottom: 0.25rem;">
+                {st.session_state.user['full_name'] or st.session_state.user['username']}
+            </div>
+            <div style="font-size: 0.85rem; color: #64748b;">
+                {st.session_state.user['email']}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # User Stats
+        if st.session_state.auth:
+            try:
+                stats = st.session_state.auth.get_user_stats(st.session_state.user['user_id'])
+                st.markdown(f"""
+                <div style="padding: 0.75rem; background: #f8fafc; border-radius: 8px; margin-bottom: 1rem;">
+                    <div style="font-size: 0.75rem; color: #64748b; font-weight: 700; margin-bottom: 0.5rem;">
+                        YOUR STATS
+                    </div>
+                    <div style="display: flex; justify-content: space-around; text-align: center;">
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 800; color: #2563eb;">{stats['total_trips']}</div>
+                            <div style="font-size: 0.7rem; color: #64748b;">Trips</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 800; color: #10b981;">₹{stats['total_spent']:,.0f}</div>
+                            <div style="font-size: 0.7rem; color: #64748b;">Spent</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            except:
+                pass
+    
+    # Database Stats
     if st.session_state.agent and st.session_state.agent.db:
         try:
             stats = st.session_state.agent.db.get_database_stats()
-            st.success("Connected to Database")
+            st.success("Connected")
             st.markdown(f"""
             <div style="padding: 1rem; background: #f8fafc; border-radius: 10px; margin-bottom: 1rem; border: 1px solid #e2e8f0;">
-                <div style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.75rem;">Database Statistics</div>
-                <div style="margin-top: 0.5rem;">
-                    <span class="stats-badge">Flights: {stats.get('total_flights', 0)}</span>
-                    <span class="stats-badge">Hotels: {stats.get('total_hotels', 0)}</span>
-                    <span class="stats-badge">Places: {stats.get('total_places', 0)}</span>
+                <div style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; 
+                            letter-spacing: 0.5px; margin-bottom: 0.75rem;">Database</div>
+                <div>
+                    <span class="stats-badge">{stats.get('total_flights', 0)} Flights</span>
+                    <span class="stats-badge">{stats.get('total_hotels', 0)} Hotels</span>
+                    <span class="stats-badge">{stats.get('total_places', 0)} Places</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
         except:
-            st.warning("Database connection issue")
+            st.warning("DB connection issue")
     else:
-        st.error("Not connected to database")
+        st.error("Not connected")
     
     st.markdown("---")
     
+    # Navigation
     if st.button("Dashboard", key="nav_overview", use_container_width=True):
         st.session_state.page = 'overview'
         st.rerun()
@@ -415,6 +544,13 @@ with st.sidebar:
         st.rerun()
     if st.button("Chat Assistant", key="nav_chat", use_container_width=True):
         st.session_state.page = 'chat'
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Logout button
+    if st.button("Logout", key="logout_btn", use_container_width=True, type="secondary"):
+        logout()
         st.rerun()
 
 # DASHBOARD PAGE
@@ -653,7 +789,6 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                         # Save
                         try:
                             trip_record = {
-                                'user_id': 'default_user',
                                 'source_city': from_city,
                                 'destination_city': to_city,
                                 'start_date': start_date,
@@ -663,7 +798,11 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                                 'itinerary': trip_data,
                                 'agent_response': ai_response
                             }
-                            st.session_state.agent.db.save_trip_history(trip_record)
+                            # Use save_user_trip instead of save_trip_history
+                            st.session_state.agent.db.save_user_trip(
+                                st.session_state.user['user_id'],  # Pass user_id
+                                trip_record
+                            )
                         except Exception as e:
                             st.warning(f"Could not save trip: {str(e)}")
                         
@@ -810,4 +949,5 @@ elif st.session_state.page == 'chat':
                 st.session_state.chat_history = []
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
+
                 st.rerun()
