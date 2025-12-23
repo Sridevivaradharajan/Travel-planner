@@ -283,20 +283,6 @@ if 'auth' not in st.session_state:
             print(f"Auth initialization error: {str(e)}")
             import traceback
             traceback.print_exc()
-if submit:
-    if not email or not password:
-        st.error("Please fill in all fields")
-    elif st.session_state.auth is None:
-        st.error("Authentication system not available. Please check:")
-        st.markdown("""
-        - Database connection status
-        - `auth.py` module exists
-        - `UserAuth` class is properly defined
-        - Database tables are created
-        """)
-        if st.button("Show Debug Info"):
-            st.code(f"COMPONENTS_AVAILABLE: {COMPONENTS_AVAILABLE}")
-            st.code(f"auth object: {st.session_state.auth}")
 
 # ===== UTILITY FUNCTIONS - DEFINE BEFORE USE =====
 
@@ -1006,6 +992,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
