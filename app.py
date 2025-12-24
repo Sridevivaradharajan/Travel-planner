@@ -1009,54 +1009,99 @@ Provide complete itinerary with flights, hotels, places, and budget."""
 """
                             st.session_state.ai_response = ai_response
 
-                        # Save trip with detailed error handling
-                        try:
-                            # Calculate estimated budget
-                            avg_flight = sum(safe_float(f.get('price', 0)) for f in flights[:3]) / max(len(flights[:3]), 1) if flights else 0
-                            avg_hotel = sum(safe_float(h.get('price_per_night', 0)) for h in hotels[:3]) / max(len(hotels[:3]), 1) if hotels else 0
-                            estimated_budget = float((avg_flight * 2) + (avg_hotel * duration) + (2000 * duration))
-                            
-                            # Prepare trip record with proper data types
-                            trip_record = {
-                                'source_city': from_city,
-                                'destination_city': to_city,
-                                'start_date': start_date.strftime('%Y-%m-%d'),  # Convert to string
-                                'end_date': end_date.strftime('%Y-%m-%d'),      # Convert to string
-                                'duration_days': int(duration),
-                                'total_budget': estimated_budget,
-                                'itinerary': trip_data,  # Pass as dict, database.py will handle JSON conversion
-                                'agent_response': ai_response[:10000] if ai_response else ''  # Truncate if too long
-                            }
-                            
-                            # Save with detailed logging
-                            if st.session_state.db and st.session_state.user:
-                                print(f"💾 [APP] Saving trip for user_id: {st.session_state.user['user_id']}")
-                                print(f"💾 [APP] Trip data: {from_city} → {to_city}, {duration} days")
-                                
-                                result = st.session_state.db.save_user_trip(
-                                    st.session_state.user['user_id'],
-                                    trip_record
-                                )
-                                
-                                if result:
-                                    print("✅ [APP] Trip saved successfully!")
-                                    st.success("✅ Trip saved to your history!")
-                                else:
-                                    print("❌ [APP] Trip save returned False")
-                                    st.warning("⚠️ Trip generated but not saved to history")
-                            else:
-                                print(f"❌ [APP] Cannot save - DB exists: {st.session_state.db is not None}, User exists: {st.session_state.user is not None}")
-                                if st.session_state.user:
-                                    print(f"    User ID: {st.session_state.user.get('user_id', 'MISSING')}")
-                                st.warning("⚠️ Trip generated but not saved (database or user error)")
-                                
-                        except Exception as e:
-                            print(f"❌ [APP] Trip save error: {str(e)}")
-                            print(f"    Error type: {type(e).__name__}")
-                            import traceback
-                            print("Full traceback:")
-                            traceback.print_exc()
-                            st.error(f"⚠️ Could not save trip: {str(e)}")
+with st.spinner('Creating your personalized trip plan...'):
+    duration = (end_date - start_date).days
+    interests_str = ", ".join(interests) if interests else "sightseeing"
+
+    st.session_state.form_data = {
+        'from_city': from_city,
+        'to_city': to_city,
+        'start_date': start_date,
+        'end_date': end_date,
+        'duration': duration,
+        'style': style,
+        'budget': budget,
+        'interests': interests_str,
+        'amenities': ', '.join(amenities) if amenities else 'WiFi',
+        'members': members
+    }
+
+    # -------------------------
+    # DATABASE FETCH
+    # -------------------------
+    if st.session_state.db:
+        budget_map = {
+            'Budget': (0, 3),
+            'Moderate': (3, 4),
+            'Luxury': (4, 5)
+        }
+        min_stars, max_stars = budget_map.get(budget, (0, 5))
+
+        flights = st.session_state.db.get_flights(from_city, to_city, limit=10)
+        hotels = st.session_state.db.get_hotels(to_city, min_stars=min_stars, limit=10)
+        places = st.session_state.db.get_places(to_city, min_rating=4.0, limit=20)
+
+        for hotel in hotels:
+            hotel['amenities_list'] = hotel.get('amenities', '').split(',') if hotel.get('amenities') else []
+
+        trip_data = {
+            'flights': flights,
+            'hotels': hotels,
+            'places': places
+        }
+    else:
+        trip_data = {'flights': [], 'hotels': [], 'places': []}
+
+    st.session_state.trip_data = trip_data
+
+    # -------------------------
+    # AI AGENT CALL (SAFE)
+    # -------------------------
+    try:
+        st.info("🤖 AI Agent is planning your trip...")
+        ai_response = st.session_state.agent.plan_trip(query)
+
+        if not ai_response or not isinstance(ai_response, str):
+            raise ValueError("Invalid agent response")
+
+        st.session_state.ai_response = ai_response
+
+    except Exception as e:
+        st.error(f"❌ Agent Error: {str(e)}")
+        st.warning("Creating fallback itinerary...")
+        st.session_state.ai_response = ai_response  # fallback already created above
+
+    # -------------------------
+    # SAVE TRIP (SAFE)
+    # -------------------------
+    try:
+        avg_flight = sum(safe_float(f.get('price', 0)) for f in flights[:3]) / max(len(flights[:3]), 1) if flights else 0
+        avg_hotel = sum(safe_float(h.get('price_per_night', 0)) for h in hotels[:3]) / max(len(hotels[:3]), 1) if hotels else 0
+        estimated_budget = float((avg_flight * 2) + (avg_hotel * duration) + (2000 * duration))
+
+        trip_record = {
+            'source_city': from_city,
+            'destination_city': to_city,
+            'start_date': start_date.strftime('%Y-%m-%d'),
+            'end_date': end_date.strftime('%Y-%m-%d'),
+            'duration_days': int(duration),
+            'total_budget': estimated_budget,
+            'itinerary': trip_data,
+            'agent_response': st.session_state.ai_response[:10000]
+        }
+
+        if st.session_state.db and st.session_state.user:
+            result = st.session_state.db.save_user_trip(
+                st.session_state.user['user_id'],
+                trip_record
+            )
+            if result:
+                st.success("✅ Trip saved to your history!")
+            else:
+                st.warning("⚠️ Trip generated but not saved")
+
+    except Exception as e:
+        st.error(f"⚠️ Could not save trip: {str(e)}")
     
     with col_preview:
         if st.session_state.trip_data:
@@ -1204,6 +1249,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
