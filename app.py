@@ -607,13 +607,16 @@ if st.session_state.logged_in and st.session_state.agent is None and st.session_
         
         if is_streamlit():
             try:
-                # FIXED: Use bracket notation instead of .get()
-                google_api_key = st.secrets["GOOGLE_API_KEY"]
-                print(f"✅ API Key found in secrets (length: {len(google_api_key)})")
-            except KeyError:
-                print("❌ GOOGLE_API_KEY not found in secrets")
+                # Access secrets with proper error handling
+                if hasattr(st.secrets, "GOOGLE_API_KEY"):
+                    google_api_key = st.secrets.GOOGLE_API_KEY
+                    print(f"✅ API Key found in secrets (length: {len(google_api_key)})")
+                else:
+                    print("❌ GOOGLE_API_KEY not found in secrets")
             except Exception as e:
                 print(f"❌ Error reading secrets: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Fallback to environment variable
         if not google_api_key:
@@ -1169,6 +1172,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
