@@ -965,77 +965,77 @@ if st.session_state.page == 'overview':
                             trip_data = {'flights': [], 'hotels': [], 'places': []}
                         
                         st.session_state.trip_data = trip_data
-                                
-                            # Build query
-                            if not has_flights:
+                        
+                        # Build query
+                        if not has_flights:
                             query = f"""Create a {duration}-day {style.lower()} trip plan from {from_city} to {to_city}.
-        
-        IMPORTANT: There are NO direct flights from {from_city} to {to_city} in the database.
-        Please suggest:
-        1. Alternative connecting routes
-        2. Other transportation options
-        3. Hotels in {to_city} (data available)
-        4. Places to visit in {to_city} (data available)
-        
-        Budget: {budget}
-        Travelers: {members}
-        Interests: {interests_str}
-        
-        Use search_all_travel_data: {from_city}|{to_city}|{budget.lower()}|{interests_str}"""
-                                else:
-                                    query = f"""Create a {duration}-day {style.lower()} trip from {from_city} to {to_city}.
-        
-        Budget: {budget}
-        Travelers: {members}
-        Interests: {interests_str}
-        
-        Use search_all_travel_data: {from_city}|{to_city}|{budget.lower()}|{interests_str}
-        
-        Provide complete itinerary with flights, hotels, places, and budget."""
-                                
-                                # Add error handling
-                                try:
-                                    st.info("🤖 AI Agent is planning your trip...")
-                                    ai_response = st.session_state.agent.plan_trip(query)
-                                    
-                                    # Validate response
-                                    if not ai_response or not isinstance(ai_response, str):
-                                        raise ValueError("Invalid agent response")
-                                    
-                                    st.session_state.ai_response = ai_response
-                                    
-                                except Exception as e:
-                                    st.error(f"❌ Agent Error: {str(e)}")
-                                    st.warning("Creating fallback itinerary...")
-                                    
-                                    # Create fallback response
-                                    ai_response = f"""# {duration}-Day Trip: {from_city} → {to_city}
-        
-        ## Trip Overview
-        - **Duration:** {duration} days ({start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')})
-        - **Budget Category:** {budget}
-        - **Travelers:** {members} person(s)
-        - **Travel Style:** {style}
-        - **Interests:** {interests_str}
-        
-        ## Transportation
-        {'⚠️ No direct flights available. Consider connecting flights or alternative transport.' if not has_flights else f'✈️ {len(flights)} direct flight options available'}
-        
-        ## Accommodation
-        🏨 {len(hotels)} hotel options found in {to_city}
-        
-        ## Attractions
-        🎯 {len(places)} places to visit in {to_city}
-        
-        ## Next Steps
-        1. Check the **Itinerary tab** for detailed options
-        2. Compare flight and hotel prices
-        3. Review attraction ratings and descriptions
-        4. Use the **Chat Assistant** for personalized recommendations
-        
-        *Note: This is a basic itinerary. For personalized recommendations, please check your agent configuration.*
-        """
-                                    st.session_state.ai_response = ai_response
+
+IMPORTANT: There are NO direct flights from {from_city} to {to_city} in the database.
+Please suggest:
+1. Alternative connecting routes
+2. Other transportation options
+3. Hotels in {to_city} (data available)
+4. Places to visit in {to_city} (data available)
+
+Budget: {budget}
+Travelers: {members}
+Interests: {interests_str}
+
+Use search_all_travel_data: {from_city}|{to_city}|{budget.lower()}|{interests_str}"""
+                        else:
+                            query = f"""Create a {duration}-day {style.lower()} trip from {from_city} to {to_city}.
+
+Budget: {budget}
+Travelers: {members}
+Interests: {interests_str}
+
+Use search_all_travel_data: {from_city}|{to_city}|{budget.lower()}|{interests_str}
+
+Provide complete itinerary with flights, hotels, places, and budget."""
+                        
+                        # Add error handling
+                        try:
+                            st.info("🤖 AI Agent is planning your trip...")
+                            ai_response = st.session_state.agent.plan_trip(query)
+                            
+                            # Validate response
+                            if not ai_response or not isinstance(ai_response, str):
+                                raise ValueError("Invalid agent response")
+                            
+                            st.session_state.ai_response = ai_response
+                            
+                        except Exception as e:
+                            st.error(f"❌ Agent Error: {str(e)}")
+                            st.warning("Creating fallback itinerary...")
+                            
+                            # Create fallback response
+                            ai_response = f"""# {duration}-Day Trip: {from_city} → {to_city}
+
+## Trip Overview
+- **Duration:** {duration} days ({start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')})
+- **Budget Category:** {budget}
+- **Travelers:** {members} person(s)
+- **Travel Style:** {style}
+- **Interests:** {interests_str}
+
+## Transportation
+{'⚠️ No direct flights available. Consider connecting flights or alternative transport.' if not has_flights else f'✈️ {len(flights)} direct flight options available'}
+
+## Accommodation
+🏨 {len(hotels)} hotel options found in {to_city}
+
+## Attractions
+🎯 {len(places)} places to visit in {to_city}
+
+## Next Steps
+1. Check the **Itinerary tab** for detailed options
+2. Compare flight and hotel prices
+3. Review attraction ratings and descriptions
+4. Use the **Chat Assistant** for personalized recommendations
+
+*Note: This is a basic itinerary. For personalized recommendations, please check your agent configuration.*
+"""
+                            st.session_state.ai_response = ai_response
                         
                         # Save
                         try:
@@ -1213,6 +1213,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
