@@ -1,7 +1,7 @@
 """
 PostgreSQL Database Integration for Travel Planner
 Cloud-safe (Streamlit) + Local-safe (.env)
-FIXED: Auto-connect on initialization
+FIXED: Auto-connect + Better error handling
 """
 
 import os
@@ -12,7 +12,7 @@ from typing import List, Dict
 
 
 # ======================================================
-# STREAMLIT DETECTION (CORRECT WAY)
+# STREAMLIT DETECTION
 # ======================================================
 def is_streamlit():
     try:
@@ -29,13 +29,28 @@ class TravelDatabase:
     def __init__(self):
         """
         Load configuration AND connect immediately.
-        ✅ This ensures db.conn is available for auth system
+        This ensures db.conn is available for auth system
         """
         self.conn = None
         self.cursor = None
-        self._load_config()
-        self.connect()  # ✅ ADDED: Connect immediately
-        self.ensure_tables()  # ✅ ADDED: Ensure tables exist
+        
+        print("Initializing database...")
+        
+        try:
+            self._load_config()
+            print("Config loaded")
+            
+            self.connect()
+            print("Connected to database")
+            
+            self.ensure_tables()
+            print("Tables verified")
+            
+        except Exception as e:
+            print(f"Database initialization failed: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     # ======================================================
     # CONFIG
@@ -43,16 +58,23 @@ class TravelDatabase:
     def _load_config(self):
         if is_streamlit():
             import streamlit as st
+            
+            if not hasattr(st, 'secrets') or 'neon' not in st.secrets:
+                raise RuntimeError("Streamlit secrets not configured. Please add [neon] section to secrets.")
+            
             cfg = st.secrets["neon"]
 
-            self.host = cfg["host"]
+            self.host = cfg.get("host")
             self.port = cfg.get("port", 5432)
-            self.database = cfg["database"]
-            self.user = cfg["user"]
-            self.password = cfg["password"]
+            self.database = cfg.get("database")
+            self.user = cfg.get("user")
+            self.password = cfg.get("password")
             self.sslmode = cfg.get("sslmode", "require")
+            
+            if not all([self.host, self.database, self.user, self.password]):
+                raise RuntimeError("❌ Incomplete Streamlit secrets configuration")
 
-            print("✅ Using Streamlit Cloud secrets")
+            print(f"✅ Using Streamlit Cloud secrets → {self.database}")
 
         else:
             from dotenv import load_dotenv
@@ -66,9 +88,9 @@ class TravelDatabase:
             self.sslmode = os.getenv("DB_SSLMODE", "require")
 
             if not all([self.host, self.database, self.user, self.password]):
-                raise RuntimeError("❌ Missing local DB environment variables")
+                raise RuntimeError("Missing local DB environment variables in .env")
 
-            print("✅ Using local .env configuration")
+            print(f"Using local .env configuration → {self.database}")
 
     # ======================================================
     # CONNECTION
@@ -78,14 +100,19 @@ class TravelDatabase:
         if self.conn:
             # Check if connection is still alive
             try:
-                self.cursor.execute("SELECT 1")
+                with self.conn.cursor() as test_cursor:
+                    test_cursor.execute("SELECT 1")
+                print("Database connection is healthy")
                 return  # Connection is healthy
             except:
                 # Connection is dead, reconnect
+                print("Connection dead, reconnecting...")
                 self.conn = None
                 self.cursor = None
 
         try:
+            print(f"Connecting to {self.host}:{self.port}/{self.database}...")
+            
             self.conn = psycopg2.connect(
                 host=self.host,
                 port=self.port,
@@ -93,12 +120,24 @@ class TravelDatabase:
                 user=self.user,
                 password=self.password,
                 sslmode=self.sslmode,
-                connect_timeout=10,  # Increased timeout for cloud
+                connect_timeout=10,
             )
+            
+            # Set autocommit to False for transaction control
+            self.conn.autocommit = False
+            
             self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
-            print(f"✅ Connected to PostgreSQL → {self.database}")
+            print(f"Connected to PostgreSQL → {self.database}")
+            
+        except psycopg2.OperationalError as e:
+            print(f"Database connection failed: {e}")
+            print("Check:")
+            print("  - Neon database is running")
+            print("  - Credentials are correct")
+            print("  - Network connection is available")
+            raise
         except Exception as e:
-            print(f"❌ Database connection failed: {e}")
+            print(f"Unexpected connection error: {e}")
             raise
 
     # ======================================================
@@ -118,7 +157,9 @@ class TravelDatabase:
                     email VARCHAR(100) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     full_name VARCHAR(100),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login TIMESTAMP,
+                    is_active BOOLEAN DEFAULT TRUE
                 )
             """)
 
@@ -165,7 +206,7 @@ class TravelDatabase:
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS trip_history (
                     trip_id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(user_id),
+                    user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
                     source_city VARCHAR(100),
                     destination_city VARCHAR(100),
                     start_date DATE,
@@ -177,12 +218,25 @@ class TravelDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            
+            # Create indexes for better performance
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)
+            """)
+            
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)
+            """)
+            
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_trip_history_user ON trip_history(user_id)
+            """)
 
             self.conn.commit()
-            print("✅ All tables verified/created")
+            print("All tables verified/created successfully")
 
         except Exception as e:
-            print(f"❌ Table creation failed: {e}")
+            print(f"Table creation failed: {e}")
             self.conn.rollback()
             raise
 
@@ -259,7 +313,8 @@ class TravelDatabase:
                 'total_hotels': total_hotels,
                 'total_places': total_places
             }
-        except:
+        except Exception as e:
+            print(f"Stats error: {e}")
             return {'total_flights': 0, 'total_hotels': 0, 'total_places': 0}
 
     # ======================================================
@@ -290,12 +345,26 @@ class TravelDatabase:
             ))
 
             self.conn.commit()
-            print(f"✅ Trip saved for user {user_id}")
+            print(f"Trip saved for user {user_id}")
             return True
 
         except Exception as e:
             self.conn.rollback()
-            print(f"❌ Save trip failed: {e}")
+            print(f"Save trip failed: {e}")
+            return False
+
+    # ======================================================
+    # CONNECTION HEALTH
+    # ======================================================
+    def is_connected(self) -> bool:
+        """Check if database is connected and healthy"""
+        if not self.conn:
+            return False
+        try:
+            with self.conn.cursor() as test_cursor:
+                test_cursor.execute("SELECT 1")
+            return True
+        except:
             return False
 
     # ======================================================
@@ -305,10 +374,15 @@ class TravelDatabase:
         """Close database connection"""
         if self.cursor:
             self.cursor.close()
+            self.cursor = None
         if self.conn:
             self.conn.close()
-            print("🔒 DB connection closed")
+            self.conn = None
+            print("DB connection closed")
 
     def __del__(self):
         """Cleanup on object destruction"""
-        self.close()
+        try:
+            self.close()
+        except:
+            pass
