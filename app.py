@@ -358,10 +358,28 @@ def safe_float(value):
 def check_route_availability(from_city, to_city):
     """Check if direct flight exists"""
     routes = st.session_state.available_routes
-    if from_city in routes:
-        destinations = [r['to'] for r in routes[from_city]]
-        return to_city in destinations
-    return False
+    if from_city and to_city and from_city != to_city:
+        has_direct_flight = check_route_availability(from_city, to_city)
+        
+        if not has_direct_flight:
+            # 1. Show the main warning
+            st.markdown(f'<div class="warning-box"><strong>No Direct Flights Available</strong> from {from_city} to {to_city}.</div>', unsafe_allow_html=True)
+            
+            # 2. Automatically detect and show alternatives
+            alternatives = get_alternative_routes(from_city, to_city)
+            if alternatives:
+                st.write("### ✈️ Possible Connecting Routes:")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.info(f"Fly from {from_city} to:")
+                    for alt in [a for a in alternatives if a['from'] == from_city]:
+                        st.markdown(f'<div class="route-card">🛫 {alt["to"]}</div>', unsafe_allow_html=True)
+                with col_b:
+                    st.info(f"Arrive in {to_city} from:")
+                    for alt in [a for a in alternatives if a['to'] == to_city]:
+                        st.markdown(f'<div class="route-card">🛬 {alt["from"]}</div>', unsafe_allow_html=True)
+        else:
+            st.success(f"✅ Direct flights found from {from_city} to {to_city}!")
 
 def get_alternative_routes(from_city, to_city):
     """Get alternative routes if direct not available"""
@@ -1087,6 +1105,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
