@@ -566,6 +566,29 @@ if st.session_state.db is None and st.session_state.auth is None:
     else:
         print("❌ Components not available")
 
+# ===== LOAD AVAILABLE ROUTES =====
+# Load routes before login so form can check availability
+if st.session_state.db and not st.session_state.available_routes:
+    try:
+        print("🔧 Loading available routes...")
+        st.session_state.available_routes = get_available_routes()
+        print(f"✅ Loaded {len(st.session_state.available_routes)} route groups")
+        
+        # DEBUG: Print all available routes
+        print("📍 Available routes in database:")
+        for city, destinations in st.session_state.available_routes.items():
+            dest_list = [d['to'] for d in destinations]
+            print(f"   {city} → {dest_list}")
+            
+    except Exception as e:
+        print(f"⚠️ Could not load routes: {e}")
+        st.session_state.available_routes = {}
+
+# ===== LOGIN CHECK =====
+if not st.session_state.logged_in:
+    show_login_page()
+    st.stop()
+
 # ===== LOGIN CHECK =====
 if not st.session_state.logged_in:
     show_login_page()
@@ -1146,6 +1169,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
