@@ -590,7 +590,6 @@ if st.session_state.logged_in and st.session_state.agent is None and st.session_
             from agent import TravelAgent
             st.session_state.agent = TravelAgent(google_api_key=google_api_key)
             st.session_state.agent.db = st.session_state.db
-            st.success("🤖 AI Agent Ready!")
             
     except Exception as e:
         st.error(f"Failed: {str(e)}")
@@ -1193,6 +1192,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
