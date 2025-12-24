@@ -528,13 +528,13 @@ if st.session_state.db is None and st.session_state.auth is None:
                     st.session_state.auth = UserAuth(st.session_state.db)
                     print("✅ Auth system initialized")
                     
-                    # --- ADDED CODE START ---
-                    # Fetch routes from DB so the form can show availability
+                    # --- ADDED: ROUTE DETECTION SYNC ---
+                    # This populates the data needed for "Success/Warning" boxes in the form
                     if not st.session_state.available_routes:
-                        print("✈️ Fetching available flight routes...")
+                        print("✈️ Syncing flight routes for detection...")
                         st.session_state.available_routes = get_available_routes()
-                        print(f"✅ Loaded routes for {len(st.session_state.available_routes)} cities")
-                    # --- ADDED CODE END ---
+                        print(f"✅ Route detection ready: {len(st.session_state.available_routes)} cities loaded")
+                    # ------------------------------------
 
                 except Exception as e:
                     print(f"❌ Auth init error: {e}")
@@ -1087,6 +1087,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
