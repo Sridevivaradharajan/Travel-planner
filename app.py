@@ -599,45 +599,25 @@ if st.session_state.logged_in and st.session_state.agent is None and st.session_
     try:
         google_api_key = None
         
-        # Method 1: Try [gemini] section with string cleanup
+        # Try [gemini] section with string cleanup
         if "gemini" in st.secrets:
             try:
                 raw_key = st.secrets["gemini"]["GOOGLE_API_KEY"]
-                # Clean up any whitespace, newlines, or quotes
-                google_api_key = str(raw_key).strip().strip('"').strip("'").strip()
-                print(f"✅ Found in [gemini] section (length: {len(google_api_key)})")
+                google_api_key = str(raw_key).strip().replace('\n', '').replace('"', '').replace("'", '').strip()
+                print(f"✅ API Key length: {len(google_api_key)}")
             except Exception as e:
-                print(f"Failed [gemini] section: {e}")
-        
-        # Method 2: Try top-level with cleanup
-        if not google_api_key and "GOOGLE_API_KEY" in st.secrets:
-            try:
-                raw_key = st.secrets["GOOGLE_API_KEY"]
-                google_api_key = str(raw_key).strip().strip('"').strip("'").strip()
-                print(f"✅ Found at top level (length: {len(google_api_key)})")
-            except Exception as e:
-                print(f"Failed top level: {e}")
-        
-        # Method 3: Environment variable
-        if not google_api_key:
-            google_api_key = os.getenv("GOOGLE_API_KEY")
-            if google_api_key:
-                print(f"✅ Found in environment")
+                print(f"Error reading key: {e}")
 
         if not google_api_key:
             st.error("❌ API Key not found")
-            st.code('[gemini]\nGOOGLE_API_KEY = "your_key"')
-            st.write("Detected:", list(st.secrets.keys()))
         else:
             from agent import TravelAgent
             st.session_state.agent = TravelAgent(google_api_key=google_api_key)
             st.session_state.agent.db = st.session_state.db
-            st.success("🤖 AI Agent initialized!")
+            st.success("🤖 AI Agent Ready!")
             
     except Exception as e:
-        st.error(f"❌ Failed: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
+        st.error(f"Failed: {str(e)}")
         
 # ===== DEBUG PANEL =====
 if st.session_state.logged_in:
@@ -1170,6 +1150,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
