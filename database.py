@@ -1,7 +1,7 @@
 """
 PostgreSQL Database Integration for Travel Planner
 Cloud-safe (Streamlit) + Local-safe (.env)
-FIXED: Auto-connect + Better error handling
+FIXED: Better error handling and secrets validation
 """
 
 import os
@@ -29,25 +29,24 @@ class TravelDatabase:
     def __init__(self):
         """
         Load configuration AND connect immediately.
-        This ensures db.conn is available for auth system
         """
         self.conn = None
         self.cursor = None
         
-        print("Initializing database...")
+        print("🔧 [DATABASE] Initializing...")
         
         try:
             self._load_config()
-            print("Config loaded")
+            print("✅ [DATABASE] Config loaded successfully")
             
             self.connect()
-            print("Connected to database")
+            print("✅ [DATABASE] Connected successfully")
             
             self.ensure_tables()
-            print("Tables verified")
+            print("✅ [DATABASE] All tables verified")
             
         except Exception as e:
-            print(f"Database initialization failed: {e}")
+            print(f"❌ [DATABASE] Initialization failed: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -59,10 +58,22 @@ class TravelDatabase:
         if is_streamlit():
             import streamlit as st
             
-            if not hasattr(st, 'secrets') or 'neon' not in st.secrets:
-                raise RuntimeError("Streamlit secrets not configured. Please add [neon] section to secrets.")
+            print("🔍 [DATABASE] Checking Streamlit secrets...")
+            
+            if not hasattr(st, 'secrets'):
+                raise RuntimeError("❌ Streamlit secrets not available")
+            
+            if 'neon' not in st.secrets:
+                raise RuntimeError("❌ [neon] section missing in secrets. Please add it in Streamlit Cloud Settings → Secrets")
             
             cfg = st.secrets["neon"]
+            
+            # Validate all required fields
+            required_fields = ['host', 'database', 'user', 'password']
+            missing = [f for f in required_fields if not cfg.get(f)]
+            
+            if missing:
+                raise RuntimeError(f"❌ Missing required secrets: {', '.join(missing)}")
 
             self.host = cfg.get("host")
             self.port = cfg.get("port", 5432)
@@ -71,10 +82,12 @@ class TravelDatabase:
             self.password = cfg.get("password")
             self.sslmode = cfg.get("sslmode", "require")
             
-            if not all([self.host, self.database, self.user, self.password]):
-                raise RuntimeError("❌ Incomplete Streamlit secrets configuration")
-
-            print(f"✅ Using Streamlit Cloud secrets → {self.database}")
+            print(f"✅ [DATABASE] Secrets loaded:")
+            print(f"   Host: {self.host}")
+            print(f"   Database: {self.database}")
+            print(f"   User: {self.user}")
+            print(f"   Port: {self.port}")
+            print(f"   SSL: {self.sslmode}")
 
         else:
             from dotenv import load_dotenv
@@ -88,9 +101,9 @@ class TravelDatabase:
             self.sslmode = os.getenv("DB_SSLMODE", "require")
 
             if not all([self.host, self.database, self.user, self.password]):
-                raise RuntimeError("Missing local DB environment variables in .env")
+                raise RuntimeError("❌ Missing local DB environment variables in .env")
 
-            print(f"Using local .env configuration → {self.database}")
+            print(f"✅ [DATABASE] Local config loaded → {self.database}")
 
     # ======================================================
     # CONNECTION
@@ -102,16 +115,15 @@ class TravelDatabase:
             try:
                 with self.conn.cursor() as test_cursor:
                     test_cursor.execute("SELECT 1")
-                print("Database connection is healthy")
-                return  # Connection is healthy
+                print("✅ [DATABASE] Connection is healthy")
+                return
             except:
-                # Connection is dead, reconnect
-                print("Connection dead, reconnecting...")
+                print("⚠️  [DATABASE] Connection dead, reconnecting...")
                 self.conn = None
                 self.cursor = None
 
         try:
-            print(f"Connecting to {self.host}:{self.port}/{self.database}...")
+            print(f"🔌 [DATABASE] Connecting to {self.host}...")
             
             self.conn = psycopg2.connect(
                 host=self.host,
@@ -123,21 +135,29 @@ class TravelDatabase:
                 connect_timeout=10,
             )
             
-            # Set autocommit to False for transaction control
             self.conn.autocommit = False
-            
             self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
-            print(f"Connected to PostgreSQL → {self.database}")
+            
+            print(f"✅ [DATABASE] Successfully connected to {self.database}")
             
         except psycopg2.OperationalError as e:
-            print(f"Database connection failed: {e}")
-            print("Check:")
-            print("  - Neon database is running")
-            print("  - Credentials are correct")
-            print("  - Network connection is available")
-            raise
+            error_msg = str(e)
+            print(f"❌ [DATABASE] Connection failed: {error_msg}")
+            
+            # Provide helpful error messages
+            if "password authentication failed" in error_msg:
+                print("   → Check: Password is correct")
+            elif "could not translate host name" in error_msg:
+                print("   → Check: Host address is correct")
+            elif "timeout" in error_msg:
+                print("   → Check: Network connection / Firewall")
+            elif "no such host" in error_msg:
+                print("   → Check: Host address spelling")
+            
+            raise RuntimeError(f"Database connection failed: {error_msg}")
+            
         except Exception as e:
-            print(f"Unexpected connection error: {e}")
+            print(f"❌ [DATABASE] Unexpected connection error: {e}")
             raise
 
     # ======================================================
@@ -149,7 +169,9 @@ class TravelDatabase:
             self.connect()
 
         try:
-            # Users table for authentication
+            print("🔧 [DATABASE] Creating tables...")
+            
+            # Users table
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     user_id SERIAL PRIMARY KEY,
@@ -202,7 +224,7 @@ class TravelDatabase:
                 )
             """)
 
-            # Trip history table (with user_id foreign key)
+            # Trip history table
             self.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS trip_history (
                     trip_id SERIAL PRIMARY KEY,
@@ -219,24 +241,16 @@ class TravelDatabase:
                 )
             """)
             
-            # Create indexes for better performance
-            self.cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)
-            """)
-            
-            self.cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)
-            """)
-            
-            self.cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_trip_history_user ON trip_history(user_id)
-            """)
+            # Create indexes
+            self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+            self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+            self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_trip_history_user ON trip_history(user_id)")
 
             self.conn.commit()
-            print("All tables verified/created successfully")
+            print("✅ [DATABASE] All tables created/verified")
 
         except Exception as e:
-            print(f"Table creation failed: {e}")
+            print(f"❌ [DATABASE] Table creation failed: {e}")
             self.conn.rollback()
             raise
 
@@ -314,12 +328,9 @@ class TravelDatabase:
                 'total_places': total_places
             }
         except Exception as e:
-            print(f"Stats error: {e}")
+            print(f"⚠️  [DATABASE] Stats error: {e}")
             return {'total_flights': 0, 'total_hotels': 0, 'total_places': 0}
 
-    # ======================================================
-    # SAVE TRIP
-    # ======================================================
     def save_user_trip(self, user_id: int, trip_data: dict) -> bool:
         """Save a trip for a specific user"""
         if not self.conn:
@@ -345,12 +356,12 @@ class TravelDatabase:
             ))
 
             self.conn.commit()
-            print(f"Trip saved for user {user_id}")
+            print(f"✅ [DATABASE] Trip saved for user {user_id}")
             return True
 
         except Exception as e:
             self.conn.rollback()
-            print(f"Save trip failed: {e}")
+            print(f"❌ [DATABASE] Save trip failed: {e}")
             return False
 
     # ======================================================
@@ -378,7 +389,7 @@ class TravelDatabase:
         if self.conn:
             self.conn.close()
             self.conn = None
-            print("DB connection closed")
+            print("🔒 [DATABASE] Connection closed")
 
     def __del__(self):
         """Cleanup on object destruction"""
