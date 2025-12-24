@@ -522,20 +522,21 @@ if st.session_state.db is None and st.session_state.auth is None:
             from auth import UserAuth
             print("Imports successful")
 
-            # Initialize database
-            print("Calling get_db()...")
+            # 1. Initialize database connection
+            print("Calling TravelDatabase()...")
             st.session_state.db = TravelDatabase()
             print(f"Database initialized: {st.session_state.db is not None}")
             
-            # Initialize auth system with database instance
+            # 2. Initialize auth system with database instance
             if st.session_state.db:
                 try:
                     print("🔧 Initializing UserAuth...")
                     st.session_state.auth = UserAuth(st.session_state.db)
                     print("✅ Auth system initialized")
                     
-                    # --- ADDED: ROUTE DETECTION SYNC ---
-                    # This populates the data needed for "Success/Warning" boxes in the form
+                    # --- CRITICAL: ROUTE DETECTION SYNC ---
+                    # This pulls all flight data immediately so the form can 
+                    # detect direct flights or suggest connecting routes.
                     if not st.session_state.available_routes:
                         print("✈️ Syncing flight routes for detection...")
                         st.session_state.available_routes = get_available_routes()
@@ -555,8 +556,13 @@ if st.session_state.db is None and st.session_state.auth is None:
             import traceback
             traceback.print_exc()
     else:
-        print("❌ Components not available")
+        print("❌ Components not available - check imports")
 
+# ===== LOGIN CHECK =====
+if not st.session_state.logged_in:
+    show_login_page()
+    st.stop()
+    
 # ===== AGENT INITIALIZATION AFTER LOGIN =====
 if st.session_state.logged_in and st.session_state.agent is None and st.session_state.db and COMPONENTS_AVAILABLE:
     try:
@@ -1093,6 +1099,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
