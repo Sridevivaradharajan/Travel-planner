@@ -496,8 +496,6 @@ def show_login_page():
 
 # ===== DATABASE & AUTH INITIALIZATION =====
 
-# ===== DATABASE & AUTH INITIALIZATION =====
-
 if 'db' not in st.session_state:
     st.session_state.db = None
 
@@ -599,7 +597,7 @@ if st.session_state.agent is None and st.session_state.db is not None and COMPON
         
         if not google_api_key:
             print("❌ NO API KEY FOUND!")
-            st.error("⚠️ Google API Key not configured in secrets")
+            st.warning("⚠️ Google API Key not configured")
         else:
             print("🔧 Creating TravelAgent instance...")
             st.session_state.agent = TravelAgent(google_api_key=google_api_key)
@@ -1164,6 +1162,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
