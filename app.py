@@ -572,26 +572,6 @@ if st.session_state.logged_in and st.session_state.agent is None and st.session_
     except Exception as e:
         st.error(f"Failed: {str(e)}")
         
-# ===== DEBUG PANEL =====
-if st.session_state.logged_in:
-    with st.sidebar:
-        with st.expander("🔍 System Status", expanded=False):
-            st.write("**Components:**", "✅" if COMPONENTS_AVAILABLE else "❌")
-            st.write("**Database:**", "✅ Connected" if st.session_state.db else "❌ Failed")
-            st.write("**Auth:**", "✅ Ready" if st.session_state.auth else "❌ Failed")
-            st.write("**Agent:**", "✅ Ready" if st.session_state.agent else "❌ Failed")
-            
-            if is_streamlit():
-                try:
-                    if "gemini" in st.secrets and "GOOGLE_API_KEY" in st.secrets["gemini"]:
-                        st.write("**API Key:**", "✅ Found")
-                    elif "GOOGLE_API_KEY" in st.secrets:
-                        st.write("**API Key:**", "✅ Found")
-                    else:
-                        st.write("**API Key:**", "❌ Missing")
-                except:
-                    st.write("**API Key:**", "❌ Error")
-                    
 # ===== SIDEBAR =====
 
 with st.sidebar:
@@ -1103,6 +1083,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
