@@ -496,12 +496,15 @@ def show_login_page():
 
 # ===== DATABASE & AUTH INITIALIZATION =====
 
+# ===== DATABASE & AUTH INITIALIZATION =====
+
 if 'db' not in st.session_state:
     st.session_state.db = None
 
 if 'auth' not in st.session_state:
     st.session_state.auth = None
     
+if st.session_state.db is None and st.session_state.auth is None:
     print("=" * 50)
     print("STARTING INITIALIZATION")
     print("=" * 50)
@@ -514,9 +517,9 @@ if 'auth' not in st.session_state:
             from auth import UserAuth
             print("Imports successful")
 
-            @st.cache_resource
+            # Initialize database WITHOUT caching
             def get_db():
-                """Initialize database connection (cached)"""
+                """Initialize database connection"""
                 print("get_db() called")
                 try:
                     print("🔧 Creating TravelDatabase instance...")
@@ -529,14 +532,12 @@ if 'auth' not in st.session_state:
                         return db
                     else:
                         print("❌ Database not connected")
-                        st.error("Database connection failed!")
                         return None
                         
                 except Exception as e:
                     print(f"❌ Database initialization error: {e}")
                     import traceback
                     traceback.print_exc()
-                    st.error(f"Database error: {str(e)}")
                     return None
             
             # Get database instance and store in session state
@@ -554,27 +555,23 @@ if 'auth' not in st.session_state:
                     print(f"❌ Auth init error: {e}")
                     import traceback
                     traceback.print_exc()
-                    st.error(f"⚠️ Auth error: {str(e)}")
                     st.session_state.auth = None
             else:
                 print("❌ No database connection available")
-                st.error("⚠️ Cannot initialize auth - no database connection")
                 
         except ImportError as e:
             print(f"❌ Import error: {e}")
-            st.error(f"⚠️ Import error: {str(e)}")
         except Exception as e:
             print(f"❌ Unexpected error: {e}")
             import traceback
             traceback.print_exc()
-            st.error(f"⚠️ Initialization error: {str(e)}")
     else:
         print("❌ Components not available")
-        st.error("⚠️ Required components not available")
 # ===== AGENT INITIALIZATION =====
-@st.cache_resource
+# ===== AGENT INITIALIZATION =====
+
 def init_agent(_db):
-    """Initialize AI agent (cached)"""
+    """Initialize AI agent"""
     try:
         # Try Streamlit secrets first, then fall back to environment variable
         google_api_key = None
@@ -592,7 +589,6 @@ def init_agent(_db):
         
         if not google_api_key:
             print("❌ GOOGLE_API_KEY not found")
-            st.error("⚠️ Google API Key not configured!")
             return None
             
         print("Initializing AI agent...")
@@ -607,7 +603,7 @@ def init_agent(_db):
         traceback.print_exc()
         return None
 
-# Initialize agent with database
+# Initialize agent with database (only once)
 if COMPONENTS_AVAILABLE and st.session_state.agent is None and st.session_state.db:
     st.session_state.agent = init_agent(st.session_state.db)
 
@@ -1131,6 +1127,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
