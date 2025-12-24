@@ -457,58 +457,92 @@ def show_login_page():
 if 'auth' not in st.session_state:
     st.session_state.auth = None
     
+    print("=" * 50)
+    print("STARTING INITIALIZATION")
+    print("=" * 50)
+    
     if COMPONENTS_AVAILABLE:
+        print("Components available")
+        
         try:
             from database import TravelDatabase
             from auth import UserAuth
+            print("Imports successful")
 
             @st.cache_resource
             def get_db():
                 """Initialize database connection (cached)"""
+                print("get_db() called")
                 try:
-                    print("Creating database instance...")
-                    db = TravelDatabase()
+                    # Check if secrets exist
+                    try:
+                        import streamlit as st
+                        if hasattr(st, 'secrets') and 'neon' in st.secrets:
+                            print("Streamlit secrets found")
+                            print(f"   Host: {st.secrets['neon'].get('host', 'MISSING')}")
+                            print(f"   Database: {st.secrets['neon'].get('database', 'MISSING')}")
+                            print(f"   User: {st.secrets['neon'].get('user', 'MISSING')}")
+                        else:
+                            print("Streamlit secrets NOT found")
+                            st.error("Database secrets not configured in Streamlit Cloud!")
+                            return None
+                    except Exception as secret_error:
+                        print(f"Error checking secrets: {secret_error}")
+                        return None
                     
-                    # Verify connection is working
+                    print("🔧 Creating TravelDatabase instance...")
+                    db = TravelDatabase()
+                    print("TravelDatabase instance created")
+                    
+                    # Verify connection
                     if db.is_connected():
-                        print("Database instance created and connected")
+                        print("Database connected and healthy")
                         return db
                     else:
-                        print("Database instance created but not connected")
+                        print("Database not connected")
+                        st.error("Database connection failed!")
                         return None
                         
                 except Exception as e:
-                    print(f"Failed to create database instance: {e}")
+                    print(f"Database initialization error: {e}")
                     import traceback
                     traceback.print_exc()
+                    st.error(f"Database error: {str(e)}")
                     return None
             
             # Get database instance
+            print("Calling get_db()...")
             db = get_db()
+            print(f"get_db() returned: {db is not None}")
             
             # Initialize auth system
             if db and db.conn:
                 try:
-                    print("Initializing auth system...")
+                    print("🔧 Initializing UserAuth...")
                     st.session_state.auth = UserAuth(db.conn)
-                    print("Auth system initialized successfully")
+                    print("✅ Auth system initialized")
+                    st.success("✅ Connected to database!")
                 except Exception as e:
-                    print(f"Auth initialization failed: {e}")
+                    print(f"❌ Auth init error: {e}")
                     import traceback
                     traceback.print_exc()
+                    st.error(f"⚠️ Auth error: {str(e)}")
                     st.session_state.auth = None
             else:
-                print("Cannot initialize auth - database not connected")
+                print("❌ No database connection available")
+                st.error("⚠️ Cannot initialize auth - no database connection")
                 
         except ImportError as e:
-            print(f"Import error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Import error: {e}")
+            st.error(f"⚠️ Import error: {str(e)}")
         except Exception as e:
-            print(f"Unexpected error during initialization: {e}")
+            print(f"❌ Unexpected error: {e}")
             import traceback
             traceback.print_exc()
-
+            st.error(f"⚠️ Initialization error: {str(e)}")
+    else:
+        print("❌ Components not available")
+        st.error("⚠️ Required components not available")
 # ===== AGENT INITIALIZATION =====
 
 @st.cache_resource
@@ -1027,6 +1061,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
