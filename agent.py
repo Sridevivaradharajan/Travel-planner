@@ -21,6 +21,11 @@ from tenacity import (
 from google.api_core import exceptions
 
 load_dotenv()
+try:
+    import streamlit as st
+    STREAMLIT_AVAILABLE = True
+except ImportError:
+    STREAMLIT_AVAILABLE = False
 
 try:
     from database import TravelDatabase
@@ -281,3 +286,4 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"❌ Error: {e}")
+
