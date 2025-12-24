@@ -566,71 +566,6 @@ if st.session_state.db is None and st.session_state.auth is None:
     else:
         print("❌ Components not available")
 
-# ===== AGENT INITIALIZATION =====
-
-# Initialize agent only once
-if st.session_state.agent is None and st.session_state.db is not None and COMPONENTS_AVAILABLE:
-    try:
-        print("=" * 50)
-        print("🔧 INITIALIZING AI AGENT")
-        print("=" * 50)
-        
-        from agent import TravelAgent
-        
-        # Get API key
-        google_api_key = None
-        
-        if is_streamlit():
-            try:
-                google_api_key = st.secrets.get("GOOGLE_API_KEY")
-                if google_api_key:
-                    print(f"✅ API Key found in secrets (length: {len(google_api_key)})")
-                else:
-                    print("❌ GOOGLE_API_KEY not in secrets")
-            except Exception as e:
-                print(f"❌ Error reading secrets: {e}")
-        
-        if not google_api_key:
-            google_api_key = os.getenv("GOOGLE_API_KEY")
-            if google_api_key:
-                print("✅ API Key found in environment")
-        
-        if not google_api_key:
-            print("❌ NO API KEY FOUND!")
-            st.warning("⚠️ Google API Key not configured")
-        else:
-            print("🔧 Creating TravelAgent instance...")
-            st.session_state.agent = TravelAgent(google_api_key=google_api_key)
-            
-            print("🔧 Attaching database to agent...")
-            st.session_state.agent.db = st.session_state.db
-            
-            print("✅ AGENT FULLY INITIALIZED")
-            
-    except Exception as e:
-        print(f"❌ AGENT INITIALIZATION FAILED!")
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {e}")
-        import traceback
-        print("Full traceback:")
-        traceback.print_exc()
-        st.session_state.agent = None
-
-# Debug output
-print(f"🔍 Agent status: {st.session_state.agent is not None}")
-print(f"🔍 DB status: {st.session_state.db is not None}")
-print(f"🔍 Components available: {COMPONENTS_AVAILABLE}")
-
-# Load available routes
-if st.session_state.db and not st.session_state.available_routes:
-    try:
-        print("🔧 Loading available routes...")
-        st.session_state.available_routes = get_available_routes()
-        print(f"✅ Loaded {len(st.session_state.available_routes)} route groups")
-    except Exception as e:
-        print(f"⚠️ Could not load routes: {e}")
-        st.session_state.available_routes = {}
-
 # ===== LOGIN CHECK =====
 if not st.session_state.logged_in:
     show_login_page()
@@ -1185,6 +1120,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
