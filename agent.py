@@ -41,12 +41,20 @@ class TravelAgent:
     def __init__(self, google_api_key: str = None):
         """Initialize agent with cloud configuration support"""
         if google_api_key is None:
-            # Try to get from environment variable
-            google_api_key = os.getenv("GOOGLE_API_KEY")
-            
-            if not google_api_key:
-                raise ValueError("GOOGLE_API_KEY not found. Please provide it as a parameter or set it in environment variables.")
+            # Try Streamlit secrets (Cloud)
+            if STREAMLIT_AVAILABLE:
+                google_api_key = st.secrets.get("GOOGLE_API_KEY")
         
+            # Fallback to environment variable (local)
+            if not google_api_key:
+                google_api_key = os.getenv("GOOGLE_API_KEY")
+        
+            # Final check
+            if not google_api_key:
+                raise ValueError(
+                    "GOOGLE_API_KEY not found. Add it to Streamlit secrets or .env"
+                )
+
         # Initialize database
         self.db = None
         if DATABASE_AVAILABLE:
@@ -286,4 +294,5 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"❌ Error: {e}")
+
 
