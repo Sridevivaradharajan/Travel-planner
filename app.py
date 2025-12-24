@@ -567,49 +567,86 @@ if st.session_state.db is None and st.session_state.auth is None:
             traceback.print_exc()
     else:
         print("❌ Components not available")
-# ===== AGENT INITIALIZATION =====
+
 # ===== AGENT INITIALIZATION =====
 
-def init_agent(_db):
-    """Initialize AI agent"""
+# Initialize agent only once
+if st.session_state.agent is None and st.session_state.db is not None and COMPONENTS_AVAILABLE:
     try:
-        # Try Streamlit secrets first, then fall back to environment variable
+        print("=" * 50)
+        print("🔧 INITIALIZING AI AGENT")
+        print("=" * 50)
+        
+        from agent import TravelAgent
+        
+        # Get API key
         google_api_key = None
         
         if is_streamlit():
             try:
                 google_api_key = st.secrets.get("GOOGLE_API_KEY")
-                print(f"✅ Google API Key loaded from Streamlit secrets")
-            except:
-                pass
+                if google_api_key:
+                    print(f"✅ API Key found in secrets (length: {len(google_api_key)})")
+                else:
+                    print("❌ GOOGLE_API_KEY not in secrets")
+            except Exception as e:
+                print(f"❌ Error reading secrets: {e}")
         
         if not google_api_key:
             google_api_key = os.getenv("GOOGLE_API_KEY")
-            print(f"✅ Google API Key loaded from environment")
+            if google_api_key:
+                print("✅ API Key found in environment")
         
         if not google_api_key:
-            print("❌ GOOGLE_API_KEY not found")
-            return None
+            print("❌ NO API KEY FOUND!")
+            st.error("⚠️ Google API Key not configured in secrets")
+        else:
+            print("🔧 Creating TravelAgent instance...")
+            st.session_state.agent = TravelAgent(google_api_key=google_api_key)
             
-        print("Initializing AI agent...")
-        agent = TravelAgent(google_api_key=google_api_key)
-        agent.db = _db  # Attach database to agent
-        print("✅ AI agent initialized with database")
-        return agent
-        
+            print("🔧 Attaching database to agent...")
+            st.session_state.agent.db = st.session_state.db
+            
+            print("✅ AGENT FULLY INITIALIZED")
+            
     except Exception as e:
-        print(f"❌ Agent initialization failed: {e}")
+        print(f"❌ AGENT INITIALIZATION FAILED!")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {e}")
         import traceback
+        print("Full traceback:")
         traceback.print_exc()
-        return None
+        st.session_state.agent = None
 
-# Initialize agent with database (only once)
-if COMPONENTS_AVAILABLE and st.session_state.agent is None and st.session_state.db:
-    st.session_state.agent = init_agent(st.session_state.db)
+# Debug output
+print(f"🔍 Agent status: {st.session_state.agent is not None}")
+print(f"🔍 DB status: {st.session_state.db is not None}")
+print(f"🔍 Components available: {COMPONENTS_AVAILABLE}")
 
 # Load available routes
 if st.session_state.db and not st.session_state.available_routes:
-    st.session_state.available_routes = get_available_routes()
+    try:
+        print("🔧 Loading available routes...")
+        st.session_state.available_routes = get_available_routes()
+        print(f"✅ Loaded {len(st.session_state.available_routes)} route groups")
+    except Exception as e:
+        print(f"⚠️ Could not load routes: {e}")
+        st.session_state.available_routes = {}
+
+# ===== DEBUG PANEL =====
+if st.session_state.logged_in:
+    with st.sidebar:
+        with st.expander("🔍 System Status", expanded=False):
+            st.write("**Components:**", "✅" if COMPONENTS_AVAILABLE else "❌")
+            st.write("**Database:**", "✅ Connected" if st.session_state.db else "❌ Failed")
+            st.write("**Auth:**", "✅ Ready" if st.session_state.auth else "❌ Failed")
+            st.write("**Agent:**", "✅ Ready" if st.session_state.agent else "❌ Failed")
+            
+            if is_streamlit():
+                has_api = 'GOOGLE_API_KEY' in st.secrets
+                st.write("**API Key:**", "✅ Found" if has_api else "❌ Missing")
+                if not has_api:
+                    st.error("Add GOOGLE_API_KEY to secrets!")
 
 # ===== LOGIN CHECK =====
 if not st.session_state.logged_in:
@@ -1127,6 +1164,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
