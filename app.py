@@ -1057,8 +1057,6 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                             print("Full traceback:")
                             traceback.print_exc()
                             st.error(f"⚠️ Could not save trip: {str(e)}")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
     
     with col_preview:
         if st.session_state.trip_data:
@@ -1206,6 +1204,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
