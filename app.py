@@ -631,6 +631,11 @@ if st.session_state.db and not st.session_state.available_routes:
         print(f"⚠️ Could not load routes: {e}")
         st.session_state.available_routes = {}
 
+# ===== LOGIN CHECK =====
+if not st.session_state.logged_in:
+    show_login_page()
+    st.stop()
+
 # ===== DEBUG PANEL =====
 if st.session_state.logged_in:
     with st.sidebar:
@@ -643,13 +648,6 @@ if st.session_state.logged_in:
             if is_streamlit():
                 has_api = 'GOOGLE_API_KEY' in st.secrets
                 st.write("**API Key:**", "✅ Found" if has_api else "❌ Missing")
-                if not has_api:
-                    st.error("Add GOOGLE_API_KEY to secrets!")
-
-# ===== LOGIN CHECK =====
-if not st.session_state.logged_in:
-    show_login_page()
-    st.stop()
 
 # ===== SIDEBAR =====
 
@@ -1162,6 +1160,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
