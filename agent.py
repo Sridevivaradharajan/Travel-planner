@@ -36,10 +36,11 @@ class TravelAgent:
     def __init__(self, google_api_key: str = None):
         """Initialize agent with cloud configuration support"""
         if google_api_key is None:
-            from config import Config
-            google_api_key = Config.get_google_api_key()
+            # Try to get from environment variable
+            google_api_key = os.getenv("GOOGLE_API_KEY")
+            
             if not google_api_key:
-                raise ValueError("GOOGLE_API_KEY not found in configuration")
+                raise ValueError("GOOGLE_API_KEY not found. Please provide it as a parameter or set it in environment variables.")
         
         # Initialize database
         self.db = None
@@ -157,7 +158,8 @@ Format cleanly. Be specific with numbers and names from the data.""",
             if hotels:
                 result += f"🏨 HOTELS in {to_city}:\n"
                 for i, h in enumerate(hotels[:3], 1):
-                    amenities = json.loads(h['amenities']) if h['amenities'] else []
+                    # Fixed: amenities are stored as comma-separated string, not JSON
+                    amenities = h['amenities'].split(',') if h['amenities'] else []
                     result += f"{i}. {h['name']} - ₹{h['price_per_night']:,}/night | ⭐{h['stars']}\n"
                     result += f"   Amenities: {', '.join(amenities[:5])}\n"
                 result += "\n"
@@ -243,9 +245,9 @@ Error: {str(e)[:200]}"""
             hotels = self.db.get_hotels(to_city, min_stars=3, max_price=max_hotel_price, limit=10)
             places = self.db.get_places(to_city, min_rating=3.5, limit=20)
             
-            # Parse amenities
+            # Fixed: Parse amenities as comma-separated string
             for h in hotels:
-                h['amenities_list'] = json.loads(h['amenities']) if h['amenities'] else []
+                h['amenities_list'] = h['amenities'].split(',') if h['amenities'] else []
             
             return {
                 'flights': flights,
