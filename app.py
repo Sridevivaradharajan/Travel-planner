@@ -1,6 +1,6 @@
 """
 Lumina Travel Planner - Professional Edition
-Fixed: Function definition order
+Fixed: Correct function definition order
 """
 import streamlit as st
 from datetime import datetime, timedelta
@@ -29,7 +29,6 @@ except Exception as e:
     st.error(f"Import Error: {str(e)}")
     COMPONENTS_AVAILABLE = False
 
-# Professional CSS without emojis
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -250,7 +249,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+
+# ===== SESSION STATE INITIALIZATION =====
 if 'page' not in st.session_state:
     st.session_state.page = 'overview'
 if 'agent' not in st.session_state:
@@ -267,49 +267,10 @@ if 'available_routes' not in st.session_state:
     st.session_state.available_routes = {}
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
-
 if 'user' not in st.session_state:
     st.session_state.user = None
 
-# Initialize auth system separately - FIXED
-# Initialize auth system separately - FIXED
-if 'auth' not in st.session_state:
-    st.session_state.auth = None
-    if COMPONENTS_AVAILABLE:
-        try:
-            from database import TravelDatabase
-            from auth import UserAuth
-
-            @st.cache_resource
-            def get_db():
-                return TravelDatabase()
-            
-            db = get_db()
-            
-            if db and db.conn:
-                st.session_state.auth = UserAuth(db.conn)
-                print("Auth system initialized successfully")
-            else:
-                print("Database connection failed")
-
-        except Exception as e:
-            print(f"Auth initialization error: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
-
-@st.cache_resource
-def init_agent():
-    """Initialize AI agent"""
-    try:
-        google_api_key = os.getenv("GOOGLE_API_KEY")
-        if not google_api_key:
-            return None
-        agent = TravelAgent(google_api_key=google_api_key)
-        return agent
-    except Exception as e:
-        st.error(f"Agent Error: {str(e)}")
-        return None
+# ===== DEFINE ALL HELPER FUNCTIONS FIRST =====
 
 @st.cache_data
 def get_available_routes():
@@ -427,7 +388,6 @@ def show_login_page():
             password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_pass")
             login_submit = st.form_submit_button("Login", use_container_width=True)
         
-        # Handle login OUTSIDE the form context
         if login_submit:
             if not email or not password:
                 st.error("Please fill in all fields")
@@ -437,11 +397,7 @@ def show_login_page():
                     st.markdown("""
                     **Possible issues:**
                     - Database connection failed
-                    - `auth.py` module missing
-                    - `UserAuth` class error
-                    - Database tables not created
-                    
-                    **Please check your terminal/logs for detailed error messages.**
+                    - Check your Streamlit logs for detailed errors
                     """)
             else:
                 with st.spinner("Logging in..."):
@@ -469,7 +425,6 @@ def show_login_page():
             
             signup_submit = st.form_submit_button("Sign Up", use_container_width=True)
         
-        # Handle signup OUTSIDE the form context
         if signup_submit:
             if not all([full_name, username, email, password, confirm]):
                 st.error("Please fill in all fields")
@@ -481,14 +436,6 @@ def show_login_page():
                 st.error("Invalid email format")
             elif st.session_state.auth is None:
                 st.error("Authentication system not available")
-                with st.expander("Show Debug Info"):
-                    st.markdown("""
-                    **Possible issues:**
-                    - Database connection failed
-                    - Auth system not initialized
-                    
-                    **Please check your terminal/logs for detailed error messages.**
-                    """)
             else:
                 with st.spinner("Creating account..."):
                     success, message = st.session_state.auth.register(username, email, password, full_name)
@@ -498,7 +445,6 @@ def show_login_page():
                     else:
                         st.error(f"{message}")
     
-    # Footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #64748b; padding: 1rem;">
@@ -506,8 +452,86 @@ def show_login_page():
     </div>
     """, unsafe_allow_html=True)
 
-# ===== INITIALIZATION =====
+# ===== DATABASE & AUTH INITIALIZATION =====
 
+if 'auth' not in st.session_state:
+    st.session_state.auth = None
+    
+    if COMPONENTS_AVAILABLE:
+        try:
+            from database import TravelDatabase
+            from auth import UserAuth
+
+            @st.cache_resource
+            def get_db():
+                """Initialize database connection (cached)"""
+                try:
+                    print("Creating database instance...")
+                    db = TravelDatabase()
+                    
+                    # Verify connection is working
+                    if db.is_connected():
+                        print("Database instance created and connected")
+                        return db
+                    else:
+                        print("Database instance created but not connected")
+                        return None
+                        
+                except Exception as e:
+                    print(f"Failed to create database instance: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return None
+            
+            # Get database instance
+            db = get_db()
+            
+            # Initialize auth system
+            if db and db.conn:
+                try:
+                    print("Initializing auth system...")
+                    st.session_state.auth = UserAuth(db.conn)
+                    print("Auth system initialized successfully")
+                except Exception as e:
+                    print(f"Auth initialization failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    st.session_state.auth = None
+            else:
+                print("Cannot initialize auth - database not connected")
+                
+        except ImportError as e:
+            print(f"Import error: {e}")
+            import traceback
+            traceback.print_exc()
+        except Exception as e:
+            print(f"Unexpected error during initialization: {e}")
+            import traceback
+            traceback.print_exc()
+
+# ===== AGENT INITIALIZATION =====
+
+@st.cache_resource
+def init_agent():
+    """Initialize AI agent (cached)"""
+    try:
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            print("GOOGLE_API_KEY not found")
+            return None
+            
+        print("Initializing AI agent...")
+        agent = TravelAgent(google_api_key=google_api_key)
+        print("AI agent initialized")
+        return agent
+        
+    except Exception as e:
+        print(f"Agent initialization failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+# Initialize agent
 if COMPONENTS_AVAILABLE and st.session_state.agent is None:
     st.session_state.agent = init_agent()
 
@@ -515,11 +539,10 @@ if COMPONENTS_AVAILABLE and st.session_state.agent is None:
 if st.session_state.agent and not st.session_state.available_routes:
     st.session_state.available_routes = get_available_routes()
 
-# ===== LOGIN CHECK - AFTER FUNCTION DEFINITION =====
-# Check if user is logged in - show login page if not
+# ===== LOGIN CHECK =====
 if not st.session_state.logged_in:
     show_login_page()
-    st.stop()  # Stop execution here if not logged in
+    st.stop()
 
 # ===== SIDEBAR =====
 
@@ -1004,6 +1027,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
