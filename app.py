@@ -315,35 +315,38 @@ if 'user' not in st.session_state:
 # ===== DEFINE ALL HELPER FUNCTIONS FIRST =====
 
 @st.cache_data
+@st.cache_data
 def get_available_routes():
     """Get all available flight routes from database"""
     try:
         if st.session_state.db:
             db = st.session_state.db
-            db.cursor.execute("""
-                SELECT DISTINCT from_city, to_city, COUNT(*) as flight_count
-                FROM flights
-                GROUP BY from_city, to_city
-                ORDER BY from_city, to_city
-            """)
-            routes = db.cursor.fetchall()
-            
-            # Organize by source city
-            route_dict = {}
-            for route in routes:
-                from_city = route['from_city']
-                to_city = route['to_city']
-                count = route['flight_count']
+            with db.get_cursor() as cursor:  # Use context manager
+                cursor.execute("""
+                    SELECT DISTINCT from_city, to_city, COUNT(*) as flight_count
+                    FROM flights
+                    GROUP BY from_city, to_city
+                    ORDER BY from_city, to_city
+                """)
+                routes = cursor.fetchall()
                 
-                if from_city not in route_dict:
-                    route_dict[from_city] = []
-                route_dict[from_city].append({'to': to_city, 'count': count})
-            
-            return route_dict
+                # Organize by source city
+                route_dict = {}
+                for route in routes:
+                    from_city = route['from_city']
+                    to_city = route['to_city']
+                    count = route['flight_count']
+                    
+                    if from_city not in route_dict:
+                        route_dict[from_city] = []
+                    route_dict[from_city].append({'to': to_city, 'count': count})
+                
+                return route_dict
         return {}
-    except:
+    except Exception as e:
+        print(f"Error loading routes: {e}")
         return {}
-
+        
 def safe_float(value):
     """Convert any numeric value to float safely"""
     try:
@@ -495,6 +498,7 @@ def show_login_page():
     """, unsafe_allow_html=True)
 
 # ===== DATABASE & AUTH INITIALIZATION =====
+# ===== DATABASE & AUTH INITIALIZATION =====
 
 if 'db' not in st.session_state:
     st.session_state.db = None
@@ -515,39 +519,16 @@ if st.session_state.db is None and st.session_state.auth is None:
             from auth import UserAuth
             print("Imports successful")
 
-            # Initialize database WITHOUT caching
-            def get_db():
-                """Initialize database connection"""
-                print("get_db() called")
-                try:
-                    print("🔧 Creating TravelDatabase instance...")
-                    db = TravelDatabase()
-                    print("TravelDatabase instance created")
-                    
-                    # Verify connection
-                    if db.is_connected():
-                        print("✅ Database connected and healthy")
-                        return db
-                    else:
-                        print("❌ Database not connected")
-                        return None
-                        
-                except Exception as e:
-                    print(f"❌ Database initialization error: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    return None
-            
-            # Get database instance and store in session state
+            # Initialize database
             print("Calling get_db()...")
-            st.session_state.db = get_db()
-            print(f"get_db() returned: {st.session_state.db is not None}")
+            st.session_state.db = TravelDatabase()
+            print(f"Database initialized: {st.session_state.db is not None}")
             
-            # Initialize auth system
-            if st.session_state.db and st.session_state.db.conn:
+            # Initialize auth system with database instance (not connection)
+            if st.session_state.db:
                 try:
                     print("🔧 Initializing UserAuth...")
-                    st.session_state.auth = UserAuth(st.session_state.db.conn)
+                    st.session_state.auth = UserAuth(st.session_state.db)  # Pass database, not conn
                     print("✅ Auth system initialized")
                 except Exception as e:
                     print(f"❌ Auth init error: {e}")
@@ -555,10 +536,8 @@ if st.session_state.db is None and st.session_state.auth is None:
                     traceback.print_exc()
                     st.session_state.auth = None
             else:
-                print("❌ No database connection available")
+                print("❌ No database available")
                 
-        except ImportError as e:
-            print(f"❌ Import error: {e}")
         except Exception as e:
             print(f"❌ Unexpected error: {e}")
             import traceback
@@ -1150,6 +1129,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
