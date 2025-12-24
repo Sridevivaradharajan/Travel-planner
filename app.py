@@ -1036,8 +1036,8 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                             except Exception as save_error:
                                 st.error(f"❌ Save failed: {save_error}")
                     
-    except Exception as e:
-        st.error(f"❌ Trip generation failed: {e}")
+except Exception as e:
+    st.error(f"❌ Trip generation failed: {e}")
     
     with col_preview:
         if st.session_state.trip_data:
@@ -1185,6 +1185,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
