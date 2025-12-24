@@ -966,8 +966,8 @@ if st.session_state.page == 'overview':
                         
                         st.session_state.trip_data = trip_data
                                 
-                        # Build query
-                        if not has_flights:
+                            # Build query
+                            if not has_flights:
                             query = f"""Create a {duration}-day {style.lower()} trip plan from {from_city} to {to_city}.
         
         IMPORTANT: There are NO direct flights from {from_city} to {to_city} in the database.
@@ -1213,6 +1213,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
