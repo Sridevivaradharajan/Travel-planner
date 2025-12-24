@@ -572,30 +572,53 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ===== AGENT INITIALIZATION AFTER LOGIN =====
-# Only initialize agent AFTER successful login
+# ===== AGENT INITIALIZATION AFTER LOGIN =====
 if st.session_state.logged_in and st.session_state.agent is None and st.session_state.db and COMPONENTS_AVAILABLE:
+    print("=" * 50)
+    print("🔧 POST-LOGIN: Initializing agent...")
+    print("=" * 50)
+    
     try:
-        print("🔧 POST-LOGIN: Initializing agent...")
-        
-        # Get API key
+        # Get API key from Streamlit secrets
         google_api_key = None
+        
+        # FIXED: Properly access secrets
         if is_streamlit():
-            google_api_key = st.secrets.get("GOOGLE_API_KEY")
+            try:
+                # Access secrets correctly
+                google_api_key = st.secrets["GOOGLE_API_KEY"]
+                print(f"✅ API Key found (length: {len(google_api_key)})")
+            except KeyError:
+                print("❌ GOOGLE_API_KEY not in secrets")
+            except Exception as e:
+                print(f"❌ Error reading secrets: {e}")
+        
+        # Fallback to environment variable
         if not google_api_key:
             google_api_key = os.getenv("GOOGLE_API_KEY")
+            if google_api_key:
+                print("✅ API Key found in environment")
         
-        if google_api_key:
-            from agent import TravelAgent
-            st.session_state.agent = TravelAgent(google_api_key=google_api_key)
-            st.session_state.agent.db = st.session_state.db
-            print("✅ POST-LOGIN: Agent initialized successfully!")
+        if not google_api_key:
+            print("❌ NO API KEY FOUND!")
+            st.error("⚠️ Google API Key not configured. Please add GOOGLE_API_KEY to Streamlit secrets.")
         else:
-            print("❌ POST-LOGIN: No API key found")
+            from agent import TravelAgent
+            
+            print("🔧 Creating TravelAgent instance...")
+            st.session_state.agent = TravelAgent(google_api_key=google_api_key)
+            
+            print("🔧 Attaching database to agent...")
+            st.session_state.agent.db = st.session_state.db
+            
+            print("✅ AGENT FULLY INITIALIZED!")
+            
     except Exception as e:
-        print(f"❌ POST-LOGIN: Agent init failed: {e}")
+        print(f"❌ AGENT INITIALIZATION FAILED: {e}")
         import traceback
         traceback.print_exc()
-
+        st.error(f"Failed to initialize agent: {str(e)}")
+        
 # ===== DEBUG PANEL =====
 if st.session_state.logged_in:
     with st.sidebar:
@@ -1120,6 +1143,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
