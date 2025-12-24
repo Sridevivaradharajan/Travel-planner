@@ -94,7 +94,7 @@ class TravelAgent:
         
         # Initialize Gemini Flash
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-flash-latest",
             google_api_key=google_api_key,
             temperature=0.7,
             convert_system_message_to_human=True,
@@ -419,3 +419,4 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         print(f"❌ Error: {traceback.format_exc()}")
+
