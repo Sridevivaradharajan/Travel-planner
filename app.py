@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 import json
 import plotly.graph_objects as go
 from decimal import Decimal
-from auth import UserAuth, init_session_state, logout
 
 load_dotenv()
 
@@ -27,15 +26,50 @@ st.set_page_config(
     layout="wide", 
     initial_sidebar_state="expanded"
 )
-init_session_state()
+
+# Try to import required modules with error handling
+COMPONENTS_AVAILABLE = False
+import_errors = []
+
+try:
+    from auth import UserAuth, init_session_state, logout
+    print("auth.py imported successfully")
+except Exception as e:
+    import_errors.append(f"auth.py: {str(e)}")
+    print(f"Failed to import auth.py: {e}")
+    st.error(f"Failed to import auth.py: {e}")
 
 try:
     from database import TravelDatabase
+    print("database.py imported successfully")
+except Exception as e:
+    import_errors.append(f"database.py: {str(e)}")
+    print(f"Failed to import database.py: {e}")
+    st.error(f"Failed to import database.py: {e}")
+
+try:
     from agent import TravelAgent
+    print("agent.py imported successfully")
     COMPONENTS_AVAILABLE = True
 except Exception as e:
-    st.error(f"Import Error: {str(e)}")
-    COMPONENTS_AVAILABLE = False
+    import_errors.append(f"agent.py: {str(e)}")
+    print(f"Failed to import agent.py: {e}")
+    st.error(f"Failed to import agent.py: {e}")
+
+if import_errors:
+    st.error("### Import Errors Detected")
+    for error in import_errors:
+        st.code(error)
+    st.info("Please make sure all required files (auth.py, database.py, agent.py) are in your repository.")
+    st.stop()
+
+# Initialize session state
+try:
+    init_session_state()
+    print("Session state initialized")
+except Exception as e:
+    st.error(f"Failed to initialize session state: {e}")
+    st.stop()
 
 st.markdown("""
 <style>
@@ -1097,6 +1131,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
