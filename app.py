@@ -595,55 +595,33 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ===== AGENT INITIALIZATION AFTER LOGIN =====
-# Only initialize agent AFTER successful login
 if st.session_state.logged_in and st.session_state.agent is None and st.session_state.db and COMPONENTS_AVAILABLE:
-    print("=" * 50)
-    print("🔧 POST-LOGIN: Initializing agent...")
-    print("=" * 50)
-    
     try:
-        # Get API key from Streamlit secrets
         google_api_key = None
         
-        if is_streamlit():
-            try:
-                # Access secrets with proper error handling
-                if hasattr(st.secrets, "GOOGLE_API_KEY"):
-                    google_api_key = st.secrets.GOOGLE_API_KEY
-                    print(f"✅ API Key found in secrets (length: {len(google_api_key)})")
-                else:
-                    print("❌ GOOGLE_API_KEY not found in secrets")
-            except Exception as e:
-                print(f"❌ Error reading secrets: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # Fallback to environment variable
-        if not google_api_key:
+        # 1. Try accessing as a dictionary (Most reliable on Cloud)
+        if "GOOGLE_API_KEY" in st.secrets:
+            google_api_key = st.secrets["GOOGLE_API_KEY"]
+        # 2. Try accessing as an attribute
+        elif hasattr(st.secrets, "GOOGLE_API_KEY"):
+            google_api_key = st.secrets.GOOGLE_API_KEY
+        # 3. Try Environment Variable backup
+        else:
             google_api_key = os.getenv("GOOGLE_API_KEY")
-            if google_api_key:
-                print("✅ API Key found in environment")
-        
+
         if not google_api_key:
-            print("❌ NO API KEY FOUND!")
-            st.error("⚠️ Google API Key not configured. Please add GOOGLE_API_KEY to Streamlit secrets.")
+            st.error("❌ API Key not found. Please ensure GOOGLE_API_KEY is at the TOP of your Secrets box.")
+            # This will show you exactly what Streamlit "sees" to help us debug
+            st.write("Current Secrets detected:", list(st.secrets.keys()))
         else:
             from agent import TravelAgent
-            
-            print("🔧 Creating TravelAgent instance...")
+            # Initialize with the key we found
             st.session_state.agent = TravelAgent(google_api_key=google_api_key)
-            
-            print("🔧 Attaching database to agent...")
             st.session_state.agent.db = st.session_state.db
-            
-            print("✅ AGENT FULLY INITIALIZED!")
-            st.success("🤖 AI Agent initialized successfully!", icon="✅")
+            st.success("🤖 AI Agent initialized successfully!")
             
     except Exception as e:
-        print(f"❌ AGENT INITIALIZATION FAILED: {e}")
-        import traceback
-        traceback.print_exc()
-        st.error(f"Failed to initialize AI agent: {str(e)}")
+        st.error(f"❌ Agent initialization failed: {str(e)}")
         
 # ===== DEBUG PANEL =====
 if st.session_state.logged_in:
@@ -1172,6 +1150,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
