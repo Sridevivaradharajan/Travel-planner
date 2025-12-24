@@ -495,6 +495,33 @@ def show_login_page():
                     else:
                         st.error(f"{message}")
     
+    # Debug info in expander
+    with st.expander("🔍 Debug: Check Route Database"):
+        if st.session_state.available_routes:
+            total_cities = len(st.session_state.available_routes)
+            total_routes = sum(len(routes) for routes in st.session_state.available_routes.values())
+            st.success(f"✅ Loaded **{total_cities} cities** with **{total_routes} total routes**")
+            
+            # Show sample routes
+            st.write("**Sample routes available in database:**")
+            sample_count = 0
+            for city, routes in st.session_state.available_routes.items():
+                if sample_count >= 5:
+                    break
+                destinations = ', '.join([r['to'] for r in routes[:3]])
+                st.write(f"• **From {city}**: {destinations}")
+                sample_count += 1
+        else:
+            st.error("⚠️ No routes loaded - database connection may have failed")
+            st.info("This means the route detection feature won't work properly")
+    
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #64748b; padding: 1rem;">
+        <small>By signing up, you agree to our Terms of Service and Privacy Policy</small>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #64748b; padding: 1rem;">
@@ -792,7 +819,7 @@ if st.session_state.page == 'overview':
             if not has_direct_flight:
                 st.markdown(f"""
                 <div class="warning-box">
-                    <strong>No Direct Flights Available</strong><br>
+                    <strong>⚠️ No Direct Flights Available</strong><br>
                     There are no direct flights from <strong>{from_city}</strong> to <strong>{to_city}</strong> in our database.
                 </div>
                 """, unsafe_allow_html=True)
@@ -800,35 +827,58 @@ if st.session_state.page == 'overview':
                 alternatives = get_alternative_routes(from_city, to_city)
                 
                 if alternatives:
-                    st.markdown("### Available Routes:")
+                    st.markdown("### 🔄 Suggested Alternative Routes:")
                     
                     # Show routes FROM source
                     from_source = [a for a in alternatives if a['from'] == from_city]
                     if from_source:
-                        st.markdown(f"**From {from_city}:**")
-                        for alt in from_source:
-                            st.markdown(f"""
-                            <div class="route-card">
-                                {alt['from']} → {alt['to']} ({alt['count']} flights available)
-                            </div>
-                            """, unsafe_allow_html=True)
+                        st.markdown(f"**✈️ Flights from {from_city} to:**")
+                        cols = st.columns(2)
+                        for idx, alt in enumerate(from_source[:6]):
+                            with cols[idx % 2]:
+                                st.markdown(f"""
+                                <div class="route-card" style="cursor: pointer;">
+                                    <strong>{alt['from']} → {alt['to']}</strong><br>
+                                    <small>✈️ {alt['count']} flights available</small>
+                                </div>
+                                """, unsafe_allow_html=True)
+                    
+                    st.markdown("---")
                     
                     # Show routes TO destination
                     to_dest = [a for a in alternatives if a['to'] == to_city]
                     if to_dest:
-                        st.markdown(f"**To {to_city}:**")
-                        for alt in to_dest:
-                            st.markdown(f"""
-                            <div class="route-card">
-                                {alt['from']} → {alt['to']} ({alt['count']} flights available)
-                            </div>
-                            """, unsafe_allow_html=True)
+                        st.markdown(f"**🛬 Flights to {to_city} from:**")
+                        cols = st.columns(2)
+                        for idx, alt in enumerate(to_dest[:6]):
+                            with cols[idx % 2]:
+                                st.markdown(f"""
+                                <div class="route-card" style="cursor: pointer;">
+                                    <strong>{alt['from']} → {alt['to']}</strong><br>
+                                    <small>✈️ {alt['count']} flights available</small>
+                                </div>
+                                """, unsafe_allow_html=True)
+                    
+                    st.info("💡 **Tip:** Consider booking connecting flights through these cities, or use train/bus for one leg of the journey.")
+                else:
+                    st.markdown("""
+                    <div class="warning-box">
+                        <strong>💡 Travel Suggestions:</strong><br>
+                        • Consider traveling by <strong>train</strong> or <strong>bus</strong><br>
+                        • Check <strong>connecting flights</strong> through major hubs like Mumbai or Delhi<br>
+                        • Try selecting different nearby cities
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
-                route_count = len([r for r in st.session_state.available_routes.get(from_city, []) if r['to'] == to_city])
+                # Extract the actual count from the route data
+                routes = st.session_state.available_routes.get(from_city, [])
+                matching_routes = [r for r in routes if r['to'] == to_city]
+                route_count = matching_routes[0]['count'] if matching_routes else 0
+                
                 if route_count > 0:
                     st.markdown(f"""
                     <div class="success-box">
-                        {route_count} direct flight(s) available
+                        ✅ <strong>{route_count} direct flight(s)</strong> available from {from_city} to {to_city}!
                     </div>
                     """, unsafe_allow_html=True)
         
@@ -844,7 +894,18 @@ if st.session_state.page == 'overview':
         with col_f:
             budget = st.selectbox("Budget", ["Budget", "Moderate", "Luxury"], index=1)
         
-        interests = st.multiselect("Interests", ["Beaches", "History", "Food", "Adventure"], default=["History"])
+        interests = st.multiselect("Interests", 
+            ["Beaches", "History", "Food", "Adventure", "Shopping", "Nightlife", 
+             "Nature", "Culture", "Temples", "Museums", "Wildlife", "Photography", 
+             "Art", "Architecture", "Relaxation", "Sports", "Festivals"], 
+            default=["History"])
+        
+        amenities = st.multiselect("Preferred Hotel Amenities", 
+            ["WiFi", "Swimming Pool", "Gym", "Spa", "Restaurant", "Free Parking", 
+             "Room Service", "Air Conditioning", "Bar/Lounge", "Airport Shuttle",
+             "Business Center", "Laundry Service", "Pet Friendly", "Beach Access"], 
+            default=["WiFi"])
+        
         members = st.number_input("Travelers", min_value=1, max_value=10, value=2)
         
         if st.button("Generate Trip Plan", key="generate_trip"):
@@ -870,6 +931,7 @@ if st.session_state.page == 'overview':
                             'style': style,
                             'budget': budget,
                             'interests': interests_str,
+                            'amenities': ', '.join(amenities) if amenities else 'WiFi',
                             'members': members
                         }
                         
@@ -1099,6 +1161,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
