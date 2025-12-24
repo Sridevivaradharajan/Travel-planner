@@ -315,7 +315,6 @@ if 'user' not in st.session_state:
 # ===== DEFINE ALL HELPER FUNCTIONS FIRST =====
 
 @st.cache_data
-@st.cache_data
 def get_available_routes():
     """Get all available flight routes from database"""
     try:
@@ -1129,6 +1128,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
