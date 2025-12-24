@@ -521,12 +521,21 @@ if st.session_state.db is None and st.session_state.auth is None:
             st.session_state.db = TravelDatabase()
             print(f"Database initialized: {st.session_state.db is not None}")
             
-            # Initialize auth system with database instance (not connection)
+            # Initialize auth system with database instance
             if st.session_state.db:
                 try:
                     print("🔧 Initializing UserAuth...")
-                    st.session_state.auth = UserAuth(st.session_state.db)  # Pass database, not conn
+                    st.session_state.auth = UserAuth(st.session_state.db)
                     print("✅ Auth system initialized")
+                    
+                    # --- ADDED CODE START ---
+                    # Fetch routes from DB so the form can show availability
+                    if not st.session_state.available_routes:
+                        print("✈️ Fetching available flight routes...")
+                        st.session_state.available_routes = get_available_routes()
+                        print(f"✅ Loaded routes for {len(st.session_state.available_routes)} cities")
+                    # --- ADDED CODE END ---
+
                 except Exception as e:
                     print(f"❌ Auth init error: {e}")
                     import traceback
@@ -541,11 +550,6 @@ if st.session_state.db is None and st.session_state.auth is None:
             traceback.print_exc()
     else:
         print("❌ Components not available")
-
-# ===== LOGIN CHECK =====
-if not st.session_state.logged_in:
-    show_login_page()
-    st.stop()
 
 # ===== AGENT INITIALIZATION AFTER LOGIN =====
 if st.session_state.logged_in and st.session_state.agent is None and st.session_state.db and COMPONENTS_AVAILABLE:
@@ -1083,6 +1087,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
