@@ -1,17 +1,19 @@
 """
-Travel Planning AI Agent - Fixed for LangChain 0.1.0
+Travel Planning AI Agent - Fixed Version
 Compatible with PostgreSQL Database and Gemini Flash
+Fixes: DateTime serialization, Agent format errors, Better error handling
 """
 import os
 from typing import List, Dict
 from dotenv import load_dotenv
 import json
+from datetime import datetime, date
+from decimal import Decimal
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, initialize_agent, AgentType
 from langchain.memory import ConversationBufferMemory
 from langchain.tools import Tool
-from decimal import Decimal
 
 from tenacity import (
     retry, 
@@ -22,6 +24,7 @@ from tenacity import (
 from google.api_core import exceptions
 
 load_dotenv()
+
 try:
     import streamlit as st
     STREAMLIT_AVAILABLE = True
@@ -33,7 +36,31 @@ try:
     DATABASE_AVAILABLE = True
 except ImportError:
     DATABASE_AVAILABLE = False
-    print("⚠️ Warning: TravelDatabase not available")
+    print("Warning: TravelDatabase not available")
+
+
+def json_serializer(obj):
+    """Convert non-serializable objects to JSON-compatible format"""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    elif isinstance(obj, Decimal):
+        return float(obj)
+    elif hasattr(obj, '__dict__'):
+        return obj.__dict__
+    return str(obj)
+
+
+def prepare_for_json(data):
+    """Recursively prepare data for JSON serialization"""
+    if isinstance(data, (datetime, date)):
+        return data.isoformat()
+    elif isinstance(data, Decimal):
+        return float(data)
+    elif isinstance(data, dict):
+        return {k: prepare_for_json(v) for k, v in data.items()}
+    elif isinstance(data, (list, tuple)):
+        return [prepare_for_json(item) for item in data]
+    return data
 
 
 class TravelAgent:
@@ -61,13 +88,13 @@ class TravelAgent:
         if DATABASE_AVAILABLE:
             try:
                 self.db = TravelDatabase()
-                print("✅ Database connected")
+                print("Database connected")
             except Exception as e:
-                print(f"❌ Database error: {e}")
+                print(f"Database error: {e}")
         
         # Initialize Gemini Flash
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-flash-latest",
+            model="gemini-1.5-flash",
             google_api_key=google_api_key,
             temperature=0.7,
             convert_system_message_to_human=True,
@@ -82,8 +109,8 @@ class TravelAgent:
         self.tools = self._create_tools()
         self.agent_executor = self._create_agent()
         
-        print("✅ TravelAgent initialized with Gemini 1.5 Flash")
-        print("📊 Quota: ~1,500 requests/day (Free Tier)")
+        print("TravelAgent initialized with Gemini 1.5 Flash")
+        print("Quota: ~1,500 requests/day (Free Tier)")
     
     def _create_tools(self) -> List[Tool]:
         """Create tools with CORRECT database methods"""
@@ -94,34 +121,85 @@ class TravelAgent:
                 name="search_all_travel_data",
                 func=self._search_all_data,
                 description="""
-                Get ALL travel data: flights, hotels, and places.
-                Input: "from_city|to_city|budget_level|interests"
+                Get ALL travel data: flights, hotels, and places in ONE call.
+                Input format: "from_city|to_city|budget_level|interests"
                 Example: "Mumbai|Goa|moderate|beaches,food"
-                Returns complete travel data in ONE call.
+                
+                This tool returns:
+                - Available flights with prices and times
+                - Hotels with ratings and amenities
+                - Tourist attractions by category
+                - Budget estimates
+                
+                USE THIS TOOL ONLY ONCE, then create your complete plan.
                 """
             ))
         
         return tools
     
     def _create_agent(self) -> AgentExecutor:
-        """Create agent using initialize_agent (compatible with LangChain 0.1.0)"""
+        """Create agent with improved format handling"""
         
-        # System message for the agent
         agent_kwargs = {
-            "prefix": """You are Lumina, an expert AI travel planner.
+            "prefix": """You are Lumina, an expert AI travel planner with access to real travel data.
 
-CRITICAL: Use search_all_travel_data tool ONCE to get data, then create a plan.
+WORKFLOW (CRITICAL - FOLLOW EXACTLY):
+1. Call search_all_travel_data tool ONCE with the required format
+2. Wait for the Observation with all travel data
+3. Analyze the data you received
+4. Respond with "Final Answer:" followed by your complete travel plan
 
-Your response MUST include:
-1. ✈️ FLIGHTS - Top 2 options with airline, price, times
-2. 🏨 HOTELS - Top 2 with name, rating, price, amenities
-3. 📅 ITINERARY - Day-by-day plan with places to visit
-4. 💰 BUDGET - Breakdown (flights, hotels, food, transport, total)
-5. 📝 TIPS - 3 helpful travel tips
+NEVER call the tool multiple times. NEVER respond before receiving the Observation.
 
-Format cleanly. Be specific with numbers and names from the data.""",
-            "format_instructions": "Use the following format:\n\nThought: Think about what to do\nAction: Use a tool if needed\nAction Input: Input for the tool\nObservation: Result from the tool\n... (repeat as needed)\nThought: I now have enough information\nFinal Answer: Your complete response",
-            "suffix": "Begin!\n\nQuestion: {input}\n{agent_scratchpad}"
+Your Final Answer MUST be a complete travel plan including:
+
+1. FLIGHTS Section
+   - List top 2 flight options with airline, price, departure/arrival times
+   - Clearly mark the recommended option
+
+2. HOTELS Section  
+   - List top 2 hotels with name, star rating, price per night, key amenities
+   - Explain why you recommend each option
+
+3. ITINERARY Section
+   - Create a day-by-day schedule
+   - Include specific places to visit from the attractions data
+   - Add morning, afternoon, and evening activities
+   - Align activities with user's stated interests
+
+4. BUDGET BREAKDOWN Section
+   - Calculate total costs based on:
+     * Round-trip flights (multiply by number of travelers)
+     * Hotels (price × number of nights)
+     * Food estimates (per day × days × travelers)
+     * Local transport (per day × days)
+   - Show calculations clearly
+   - Present final total
+
+5. TRAVEL TIPS Section
+   - Provide 3 practical, specific tips
+   - Base tips on the destination and trip type
+
+Format your response with clear sections, tables where helpful, and emoji headers.""",
+
+            "format_instructions": """Use this format STRICTLY:
+
+Thought: [Understand what the user wants]
+Action: search_all_travel_data
+Action Input: from_city|to_city|budget|interests
+Observation: [Wait for the tool output - DO NOT SKIP THIS]
+Thought: I now have all the data. I will create a complete travel plan.
+Final Answer: [Your complete formatted travel plan with all 5 sections]
+
+CRITICAL RULES:
+- After receiving Observation, your next output MUST start with "Thought:" then "Final Answer:"
+- NEVER write additional text without proper Thought/Action/Final Answer format
+- If you get an error, think about it, then provide Final Answer with available info""",
+
+            "suffix": """Begin! Remember: Call the tool ONCE, wait for data, then give Final Answer.
+
+Question: {input}
+{agent_scratchpad}"""
         }
         
         return initialize_agent(
@@ -131,91 +209,101 @@ Format cleanly. Be specific with numbers and names from the data.""",
             verbose=True,
             memory=self.memory,
             agent_kwargs=agent_kwargs,
-            max_iterations=3,
-            max_execution_time=60,
+            max_iterations=5,
+            max_execution_time=90,
+            early_stopping_method="generate",
             handle_parsing_errors=True
         )
     
     def _search_all_data(self, query: str) -> str:
-        """Combined search using CORRECT database methods"""
+        """Combined search using CORRECT database methods with proper formatting"""
         if not self.db:
-            return "❌ Database not available"
+            return "Database not available"
         
         try:
             parts = query.split("|")
             if len(parts) < 3:
-                return "❌ Invalid format. Use: from_city|to_city|budget_level|interests"
+                return "Invalid format. Use: from_city|to_city|budget_level|interests"
             
             from_city = parts[0].strip().title()
             to_city = parts[1].strip().title()
             budget_level = parts[2].strip().lower()
             interests = parts[3].strip() if len(parts) > 3 else ""
             
-            result = ""
+            result = []
             
-            # 1. Get flights using correct method: get_flights()
+            # 1. Get flights
             flights = self.db.get_flights(from_city, to_city, limit=5)
             if flights:
-                result += f"✈️ FLIGHTS ({from_city} → {to_city}):\n"
+                result.append(f"FLIGHTS ({from_city} → {to_city}):")
                 for i, f in enumerate(flights[:3], 1):
-                    result += f"{i}. {f['airline']} - ₹{float(f['price']):,.0f}\n"
-                    result += f"   Departure: {f['departure_time']} | Arrival: {f['arrival_time']}\n"
-                result += "\n"
+                    # Convert datetime to string for display
+                    dept_time = f['departure_time'].strftime('%Y-%m-%d %H:%M:%S') if isinstance(f['departure_time'], datetime) else str(f['departure_time'])
+                    arr_time = f['arrival_time'].strftime('%Y-%m-%d %H:%M:%S') if isinstance(f['arrival_time'], datetime) else str(f['arrival_time'])
+                    
+                    result.append(f"{i}. {f['airline']} - ₹{float(f['price']):,.0f}")
+                    result.append(f"   Departure: {dept_time} | Arrival: {arr_time}")
+                result.append("")
             else:
-                result += f"⚠️ No direct flights found for {from_city} → {to_city}\n\n"
+                result.append(f"No direct flights found for {from_city} → {to_city}\n")
             
-            # 2. Get hotels using correct method: get_hotels()
+            # 2. Get hotels
             budget_multiplier = {"budget": 0.7, "moderate": 1.0, "luxury": 1.5}.get(budget_level, 1.0)
             max_hotel_price = 5000 * budget_multiplier
             
             hotels = self.db.get_hotels(to_city, min_stars=3, max_price=max_hotel_price, limit=5)
             if hotels:
-                result += f"🏨 HOTELS in {to_city}:\n"
+                result.append(f"HOTELS in {to_city}:")
                 for i, h in enumerate(hotels[:3], 1):
-                    # Fixed: amenities are stored as comma-separated string, not JSON
                     amenities = h['amenities'].split(',') if h['amenities'] else []
-                    result += f"{i}. {h['name']} - ₹{h['price_per_night']:,}/night | ⭐{h['stars']}\n"
-                    result += f"   Amenities: {', '.join(amenities[:5])}\n"
-                result += "\n"
+                    amenities_str = json.dumps(amenities[:5])  # Convert to JSON string for cleaner display
+                    result.append(f"{i}. {h['name']} - ₹{float(h['price_per_night']):,.2f}/night | ⭐{h['stars']}")
+                    result.append(f"   Amenities: {amenities_str}")
+                result.append("")
             else:
-                result += f"⚠️ No hotels found in {to_city}\n\n"
+                result.append(f"No hotels found in {to_city}\n")
             
-            # 3. Get places using correct method: get_places()
+            # 3. Get places
             places = self.db.get_places(to_city, min_rating=3.5, limit=15)
             if places:
-                result += f"🗺️ TOP ATTRACTIONS in {to_city}:\n"
+                result.append(f"TOP ATTRACTIONS in {to_city}:\n")
                 
                 # Group by type
                 place_types = {}
                 for p in places:
-                    ptype = p['type'] or 'General'
+                    ptype = p['type'] or 'general'
                     if ptype not in place_types:
                         place_types[ptype] = []
                     place_types[ptype].append(p)
                 
                 for ptype, plist in list(place_types.items())[:5]:
-                    result += f"\n{ptype}:\n"
+                    result.append(f"{ptype}:")
                     for p in plist[:3]:
-                        result += f"  • {p['name']} - ⭐{p['rating']}/5\n"
-                result += "\n"
+                        result.append(f"  • {p['name']} - ⭐{float(p['rating']):.2f}/5")
+                    result.append("")
             else:
-                result += f"⚠️ No attractions found in {to_city}\n\n"
+                result.append(f"No attractions found in {to_city}\n")
             
             # 4. Budget calculation
-            avg_flight = sum(float(f['price']) for f in flights[:2]) / 2
-            avg_hotel = sum(float(h['price_per_night']) for h in hotels[:2]) / 2
+            if flights and hotels:
+                avg_flight = sum(float(f['price']) for f in flights[:2]) / min(2, len(flights))
+                avg_hotel = sum(float(h['price_per_night']) for h in hotels[:2]) / min(2, len(hotels))
+                
+                result.append(f"BUDGET ESTIMATE ({budget_level.title()}):")
+                result.append(f"Round-trip Flights: ₹{float(avg_flight) * 2:,.0f}")
+                result.append(f"Hotel per night: ₹{float(avg_hotel):,.0f}")
+                result.append(f"Food per day: ₹{int(1500 * budget_multiplier):,}")
+                result.append(f"Transport per day: ₹{int(800 * budget_multiplier):,}")
             
-            result += f"💰 BUDGET ESTIMATE ({budget_level.title()}):\n"
-            result += f"Round-trip Flights: ₹{float(avg_flight) * 2 * budget_multiplier:,.0f}\n"
-            result += f"Hotel per night: ₹{float(avg_hotel) * budget_multiplier:,.0f}\n"
-            result += f"Food per day: ₹{(1500 * budget_multiplier):,.0f}\n"
-            result += f"Transport per day: ₹{(800 * budget_multiplier):,.0f}\n"
-            result += f"\nInterests: {interests}\n"
+            result.append(f"\nInterests: {interests}")
             
-            return result
+            return "\n".join(result)
             
         except Exception as e:
-            return f"❌ Error: {str(e)}"
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Error in _search_all_data: {error_details}")
+            return f"Error searching travel data: {str(e)}\nPlease try again or contact support."
     
     @retry(
         retry=retry_if_exception_type(exceptions.ResourceExhausted),
@@ -223,31 +311,34 @@ Format cleanly. Be specific with numbers and names from the data.""",
         stop=stop_after_attempt(2)
     )
     def plan_trip(self, user_query: str) -> str:
-        """Plan trip with rate limiting"""
+        """Plan trip with rate limiting and better error handling"""
         try:
             response = self.agent_executor.invoke({"input": user_query})
-            return response.get("output", "❌ No response")
+            return response.get("output", "No response generated")
             
         except exceptions.ResourceExhausted as e:
             return f"""⚠️ **Rate Limit Exceeded**
             
-Free tier: 20 requests/day. Please wait or upgrade your API key.
+Free tier: 1,500 requests/day. Please wait a moment or upgrade your API key.
 
 Error: {str(e)[:200]}"""
             
         except Exception as e:
-            return f"❌ Error: {str(e)}"
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Error in plan_trip: {error_details}")
+            return f"Error planning trip: {str(e)}\n\nPlease try rephrasing your request or contact support."
     
     def chat(self, message: str) -> str:
         """Chat about existing trip plan"""
         try:
             response = self.agent_executor.invoke({"input": message})
-            return response.get("output", "❌ No response")
+            return response.get("output", "No response generated")
         except Exception as e:
-            return f"❌ Error: {str(e)}"
+            return f"Error: {str(e)}"
     
     def get_structured_data(self, from_city: str, to_city: str, budget: str) -> Dict:
-        """Get structured data for dashboard (no AI call)"""
+        """Get structured data for dashboard (no AI call) with proper serialization"""
         if not self.db:
             return {}
         
@@ -259,9 +350,17 @@ Error: {str(e)[:200]}"""
             hotels = self.db.get_hotels(to_city, min_stars=3, max_price=max_hotel_price, limit=10)
             places = self.db.get_places(to_city, min_rating=3.5, limit=20)
             
-            # Fixed: Parse amenities as comma-separated string
+            # Prepare data for JSON serialization
+            flights = prepare_for_json(flights)
+            hotels = prepare_for_json(hotels)
+            places = prepare_for_json(places)
+            
+            # Parse amenities for hotels
             for h in hotels:
-                h['amenities_list'] = h['amenities'].split(',') if h['amenities'] else []
+                if isinstance(h.get('amenities'), str):
+                    h['amenities_list'] = h['amenities'].split(',') if h['amenities'] else []
+                else:
+                    h['amenities_list'] = []
             
             return {
                 'flights': flights,
@@ -269,33 +368,54 @@ Error: {str(e)[:200]}"""
                 'places': places
             }
         except Exception as e:
-            print(f"Error getting structured data: {e}")
+            import traceback
+            print(f"Error getting structured data: {traceback.format_exc()}")
             return {}
+    
+    def save_trip_plan(self, user_id: str, trip_data: Dict) -> bool:
+        """Save trip plan with proper JSON serialization"""
+        if not self.db:
+            return False
+        
+        try:
+            # Prepare data for JSON serialization
+            serializable_data = prepare_for_json(trip_data)
+            
+            # Convert to JSON string
+            trip_json = json.dumps(serializable_data, default=json_serializer)
+            
+            # Save to database
+            self.db.save_trip(user_id, trip_json)
+            print("Trip saved successfully")
+            return True
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"[DATABASE] Save trip failed: {error_details}")
+            return False
     
     def reset_memory(self):
         """Clear conversation memory"""
         self.memory.clear()
-        print("🔄 Memory cleared")
+        print("Memory cleared")
 
 
 if __name__ == "__main__":
-    print("🚀 Testing Fixed Agent...")
+    print("Testing Fixed Agent...")
     
     try:
         agent = TravelAgent()
-        test_query = "Plan a 3-day moderate trip from Mumbai to Goa for 2 people interested in beaches and food. Use search_all_travel_data: Mumbai|Goa|moderate|beaches,food"
+        test_query = "Plan a 3-day moderate budget trip from Mumbai to Goa for 2 people interested in beaches and food"
         
         print("\n" + "="*60)
         print("Test Query:", test_query)
         print("="*60 + "\n")
         
         response = agent.plan_trip(test_query)
-        print("\n📋 RESPONSE:\n")
+        print("\n RESPONSE:\n")
         print(response)
         
     except Exception as e:
-        print(f"❌ Error: {e}")
-
-
-
-
+        import traceback
+        print(f"❌ Error: {traceback.format_exc()}")
