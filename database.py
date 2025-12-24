@@ -1,6 +1,7 @@
 """
 PostgreSQL Database Integration for Travel Planner
 Cloud-safe (Streamlit) + Local-safe (.env)
+FIXED: Auto-connect on initialization
 """
 
 import os
@@ -27,12 +28,14 @@ def is_streamlit():
 class TravelDatabase:
     def __init__(self):
         """
-        Load configuration ONLY.
-        ❌ Do NOT connect to DB here.
+        Load configuration AND connect immediately.
+        ✅ This ensures db.conn is available for auth system
         """
         self.conn = None
         self.cursor = None
         self._load_config()
+        self.connect()  # ✅ ADDED: Connect immediately
+        self.ensure_tables()  # ✅ ADDED: Ensure tables exist
 
     # ======================================================
     # CONFIG
@@ -52,6 +55,9 @@ class TravelDatabase:
             print("✅ Using Streamlit Cloud secrets")
 
         else:
+            from dotenv import load_dotenv
+            load_dotenv()
+            
             self.host = os.getenv("DB_HOST")
             self.port = os.getenv("DB_PORT", "5432")
             self.database = os.getenv("DB_NAME")
@@ -65,90 +71,129 @@ class TravelDatabase:
             print("✅ Using local .env configuration")
 
     # ======================================================
-    # CONNECTION (LAZY)
+    # CONNECTION
     # ======================================================
     def connect(self):
+        """Connect to database if not already connected"""
         if self.conn:
-            return  # already connected
+            # Check if connection is still alive
+            try:
+                self.cursor.execute("SELECT 1")
+                return  # Connection is healthy
+            except:
+                # Connection is dead, reconnect
+                self.conn = None
+                self.cursor = None
 
-        self.conn = psycopg2.connect(
-            host=self.host,
-            port=self.port,
-            database=self.database,
-            user=self.user,
-            password=self.password,
-            sslmode=self.sslmode,
-            connect_timeout=5,
-        )
-        self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
-        print(f"✅ Connected to PostgreSQL → {self.database}")
+        try:
+            self.conn = psycopg2.connect(
+                host=self.host,
+                port=self.port,
+                database=self.database,
+                user=self.user,
+                password=self.password,
+                sslmode=self.sslmode,
+                connect_timeout=10,  # Increased timeout for cloud
+            )
+            self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+            print(f"✅ Connected to PostgreSQL → {self.database}")
+        except Exception as e:
+            print(f"❌ Database connection failed: {e}")
+            raise
 
     # ======================================================
     # TABLE CREATION
     # ======================================================
     def ensure_tables(self):
-        self.connect()
+        """Ensure all required tables exist"""
+        if not self.conn:
+            self.connect()
 
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS flights (
-                id SERIAL PRIMARY KEY,
-                flight_id VARCHAR(20) UNIQUE,
-                airline VARCHAR(100),
-                from_city VARCHAR(100),
-                to_city VARCHAR(100),
-                departure_time TIMESTAMP,
-                arrival_time TIMESTAMP,
-                price NUMERIC(10,2)
-            )
-        """)
+        try:
+            # Users table for authentication
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id SERIAL PRIMARY KEY,
+                    username VARCHAR(50) UNIQUE NOT NULL,
+                    email VARCHAR(100) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    full_name VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS hotels (
-                id SERIAL PRIMARY KEY,
-                hotel_id VARCHAR(20) UNIQUE,
-                name VARCHAR(200),
-                city VARCHAR(100),
-                stars INTEGER,
-                price_per_night NUMERIC(10,2),
-                amenities TEXT
-            )
-        """)
+            # Flights table
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS flights (
+                    id SERIAL PRIMARY KEY,
+                    flight_id VARCHAR(20) UNIQUE,
+                    airline VARCHAR(100),
+                    from_city VARCHAR(100),
+                    to_city VARCHAR(100),
+                    departure_time TIMESTAMP,
+                    arrival_time TIMESTAMP,
+                    price NUMERIC(10,2)
+                )
+            """)
 
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS places (
-                id SERIAL PRIMARY KEY,
-                place_id VARCHAR(20) UNIQUE,
-                name VARCHAR(200),
-                city VARCHAR(100),
-                type VARCHAR(100),
-                rating NUMERIC(3,2)
-            )
-        """)
+            # Hotels table
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS hotels (
+                    id SERIAL PRIMARY KEY,
+                    hotel_id VARCHAR(20) UNIQUE,
+                    name VARCHAR(200),
+                    city VARCHAR(100),
+                    stars INTEGER,
+                    price_per_night NUMERIC(10,2),
+                    amenities TEXT
+                )
+            """)
 
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS trip_history (
-                trip_id SERIAL PRIMARY KEY,
-                user_id INTEGER,
-                source_city VARCHAR(100),
-                destination_city VARCHAR(100),
-                start_date DATE,
-                end_date DATE,
-                duration_days INTEGER,
-                total_budget NUMERIC(10,2),
-                itinerary_json TEXT,
-                agent_response TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+            # Places table
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS places (
+                    id SERIAL PRIMARY KEY,
+                    place_id VARCHAR(20) UNIQUE,
+                    name VARCHAR(200),
+                    city VARCHAR(100),
+                    type VARCHAR(100),
+                    rating NUMERIC(3,2)
+                )
+            """)
 
-        self.conn.commit()
-        print("✅ Tables verified")
+            # Trip history table (with user_id foreign key)
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS trip_history (
+                    trip_id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(user_id),
+                    source_city VARCHAR(100),
+                    destination_city VARCHAR(100),
+                    start_date DATE,
+                    end_date DATE,
+                    duration_days INTEGER,
+                    total_budget NUMERIC(10,2),
+                    itinerary_json TEXT,
+                    agent_response TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            self.conn.commit()
+            print("✅ All tables verified/created")
+
+        except Exception as e:
+            print(f"❌ Table creation failed: {e}")
+            self.conn.rollback()
+            raise
 
     # ======================================================
     # QUERY METHODS
     # ======================================================
     def get_flights(self, from_city: str, to_city: str, limit: int = 10) -> List[Dict]:
-        self.connect()
+        """Get flights between two cities"""
+        if not self.conn:
+            self.connect()
+            
         self.cursor.execute("""
             SELECT * FROM flights
             WHERE LOWER(from_city) = LOWER(%s)
@@ -159,7 +204,9 @@ class TravelDatabase:
         return [dict(row) for row in self.cursor.fetchall()]
 
     def get_hotels(self, city: str, min_stars: int = 0, max_price=None, limit: int = 10) -> List[Dict]:
-        self.connect()
+        """Get hotels in a city with optional filters"""
+        if not self.conn:
+            self.connect()
 
         query = """
             SELECT * FROM hotels
@@ -179,7 +226,10 @@ class TravelDatabase:
         return [dict(row) for row in self.cursor.fetchall()]
 
     def get_places(self, city: str, min_rating: float = 0, limit: int = 20) -> List[Dict]:
-        self.connect()
+        """Get places to visit in a city"""
+        if not self.conn:
+            self.connect()
+            
         self.cursor.execute("""
             SELECT * FROM places
             WHERE LOWER(city) = LOWER(%s)
@@ -189,11 +239,36 @@ class TravelDatabase:
         """, (city, min_rating, limit))
         return [dict(row) for row in self.cursor.fetchall()]
 
+    def get_database_stats(self) -> Dict:
+        """Get statistics about the database"""
+        if not self.conn:
+            self.connect()
+            
+        try:
+            self.cursor.execute("SELECT COUNT(*) as count FROM flights")
+            total_flights = self.cursor.fetchone()['count']
+            
+            self.cursor.execute("SELECT COUNT(*) as count FROM hotels")
+            total_hotels = self.cursor.fetchone()['count']
+            
+            self.cursor.execute("SELECT COUNT(*) as count FROM places")
+            total_places = self.cursor.fetchone()['count']
+            
+            return {
+                'total_flights': total_flights,
+                'total_hotels': total_hotels,
+                'total_places': total_places
+            }
+        except:
+            return {'total_flights': 0, 'total_hotels': 0, 'total_places': 0}
+
     # ======================================================
     # SAVE TRIP
     # ======================================================
     def save_user_trip(self, user_id: int, trip_data: dict) -> bool:
-        self.connect()
+        """Save a trip for a specific user"""
+        if not self.conn:
+            self.connect()
 
         try:
             self.cursor.execute("""
@@ -215,6 +290,7 @@ class TravelDatabase:
             ))
 
             self.conn.commit()
+            print(f"✅ Trip saved for user {user_id}")
             return True
 
         except Exception as e:
@@ -226,8 +302,13 @@ class TravelDatabase:
     # CLOSE
     # ======================================================
     def close(self):
+        """Close database connection"""
         if self.cursor:
             self.cursor.close()
         if self.conn:
             self.conn.close()
             print("🔒 DB connection closed")
+
+    def __del__(self):
+        """Cleanup on object destruction"""
+        self.close()
