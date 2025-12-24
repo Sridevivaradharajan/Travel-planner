@@ -1008,7 +1008,7 @@ Provide complete itinerary with flights, hotels, places, and budget."""
 *Note: This is a basic itinerary. For personalized recommendations, please check your agent configuration.*
 """
                             st.session_state.ai_response = ai_response
-                        
+
                         # Save trip with detailed error handling
                         try:
                             # Calculate estimated budget
@@ -1204,6 +1204,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
