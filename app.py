@@ -356,30 +356,18 @@ def safe_float(value):
         return 0.0
 
 def check_route_availability(from_city, to_city):
-    """Check if direct flight exists"""
-    routes = st.session_state.available_routes
-    if from_city and to_city and from_city != to_city:
-        has_direct_flight = check_route_availability(from_city, to_city)
-        
-        if not has_direct_flight:
-            # 1. Show the main warning
-            st.markdown(f'<div class="warning-box"><strong>No Direct Flights Available</strong> from {from_city} to {to_city}.</div>', unsafe_allow_html=True)
+    """Check if direct flight exists in the pre-loaded routes"""
+    # 1. Access the pre-loaded routes from session state
+    routes = st.session_state.get('available_routes', {})
+    
+    # 2. Check if the starting city exists in our data
+    if from_city in routes:
+        # 3. Check if any of the destinations for that city match our target 'to_city'
+        destinations = [r['to'] for r in routes[from_city]]
+        if to_city in destinations:
+            return True # Direct flight found
             
-            # 2. Automatically detect and show alternatives
-            alternatives = get_alternative_routes(from_city, to_city)
-            if alternatives:
-                st.write("### ✈️ Possible Connecting Routes:")
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.info(f"Fly from {from_city} to:")
-                    for alt in [a for a in alternatives if a['from'] == from_city]:
-                        st.markdown(f'<div class="route-card">🛫 {alt["to"]}</div>', unsafe_allow_html=True)
-                with col_b:
-                    st.info(f"Arrive in {to_city} from:")
-                    for alt in [a for a in alternatives if a['to'] == to_city]:
-                        st.markdown(f'<div class="route-card">🛬 {alt["from"]}</div>', unsafe_allow_html=True)
-        else:
-            st.success(f"✅ Direct flights found from {from_city} to {to_city}!")
+    return False # No direct flight found
 
 def get_alternative_routes(from_city, to_city):
     """Get alternative routes if direct not available"""
