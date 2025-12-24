@@ -495,26 +495,6 @@ def show_login_page():
                     else:
                         st.error(f"{message}")
     
-    # Debug info in expander
-    with st.expander("🔍 Debug: Check Route Database"):
-        if st.session_state.available_routes:
-            total_cities = len(st.session_state.available_routes)
-            total_routes = sum(len(routes) for routes in st.session_state.available_routes.values())
-            st.success(f"✅ Loaded **{total_cities} cities** with **{total_routes} total routes**")
-            
-            # Show sample routes
-            st.write("**Sample routes available in database:**")
-            sample_count = 0
-            for city, routes in st.session_state.available_routes.items():
-                if sample_count >= 5:
-                    break
-                destinations = ', '.join([r['to'] for r in routes[:3]])
-                st.write(f"• **From {city}**: {destinations}")
-                sample_count += 1
-        else:
-            st.error("⚠️ No routes loaded - database connection may have failed")
-            st.info("This means the route detection feature won't work properly")
-    
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #64748b; padding: 1rem;">
@@ -1213,6 +1193,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
