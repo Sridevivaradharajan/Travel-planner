@@ -1123,15 +1123,36 @@ elif st.session_state.page == 'itinerary':
         st.info("Generate a trip first from the Dashboard")
 
 # CHAT PAGE
+# CHAT PAGE
 elif st.session_state.page == 'chat':
-    st.markdown("### Chat with Lumina Assistant")
+    # Header with clear button
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("### Chat with Lumina Assistant")
+    with col2:
+        if st.button("🗑️ Clear Chat", key="clear_chat_top", use_container_width=True, type="secondary"):
+            st.session_state.chat_history = []
+            if st.session_state.agent:
+                st.session_state.agent.reset_memory()
+            st.rerun()
+    
+    st.markdown("---")
     
     if not st.session_state.agent:
         st.error("Agent not initialized")
     elif not st.session_state.ai_response:
         st.info("Generate a trip first to start chatting!")
     else:
-        # Chat messages
+        # Chat messages with empty state
+        if not st.session_state.chat_history:
+            st.markdown("""
+            <div style="text-align: center; padding: 3rem; color: #64748b;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">💬</div>
+                <div style="font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem;">Start a Conversation</div>
+                <div>Ask me anything about your trip plan, hotels, activities, or travel tips!</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
         for msg in st.session_state.chat_history:
             if msg['role'] == 'user':
                 st.chat_message("user").write(msg['content'])
@@ -1151,16 +1172,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
-        
-        # Clear button at bottom in sidebar style
-        st.markdown("<br>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("Clear Chat History", use_container_width=True):
-                st.session_state.chat_history = []
-                if st.session_state.agent:
-                    st.session_state.agent.reset_memory()
-                st.rerun()
+
 
 
 
