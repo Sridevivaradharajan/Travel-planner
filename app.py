@@ -599,29 +599,32 @@ if st.session_state.logged_in and st.session_state.agent is None and st.session_
     try:
         google_api_key = None
         
-        # 1. Try accessing as a dictionary (Most reliable on Cloud)
-        if "GOOGLE_API_KEY" in st.secrets:
+        # Method 1: Try [gemini] section (RECOMMENDED)
+        if "gemini" in st.secrets:
             google_api_key = st.secrets["gemini"]["GOOGLE_API_KEY"]
-        # 2. Try accessing as an attribute
-        elif hasattr(st.secrets, "GOOGLE_API_KEY"):
-            google_api_key = st.secrets.GOOGLE_API_KEY
-        # 3. Try Environment Variable backup
+            print(f"✅ Found in [gemini] section")
+        # Method 2: Try top-level
+        elif "GOOGLE_API_KEY" in st.secrets:
+            google_api_key = st.secrets["GOOGLE_API_KEY"]
+            print(f"✅ Found at top level")
+        # Method 3: Environment variable
         else:
             google_api_key = os.getenv("GOOGLE_API_KEY")
+            if google_api_key:
+                print(f"✅ Found in environment")
 
         if not google_api_key:
-            st.error("❌ API Key not found. Please ensure GOOGLE_API_KEY is at the TOP of your Secrets box.")
-            # This will show you exactly what Streamlit "sees" to help us debug
-            st.write("Current Secrets detected:", list(st.secrets.keys()))
+            st.error("❌ API Key not found")
+            st.code('[gemini]\nGOOGLE_API_KEY = "your_key"')
+            st.write("Detected:", list(st.secrets.keys()))
         else:
             from agent import TravelAgent
-            # Initialize with the key we found
             st.session_state.agent = TravelAgent(google_api_key=google_api_key)
             st.session_state.agent.db = st.session_state.db
-            st.success("🤖 AI Agent initialized successfully!")
+            st.success("🤖 AI Agent initialized!")
             
     except Exception as e:
-        st.error(f"❌ Agent initialization failed: {str(e)}")
+        st.error(f"❌ Failed: {str(e)}")
         
 # ===== DEBUG PANEL =====
 if st.session_state.logged_in:
@@ -634,10 +637,14 @@ if st.session_state.logged_in:
             
             if is_streamlit():
                 try:
-                    has_api = st.secrets["GOOGLE_API_KEY"]
-                    st.write("**API Key:**", "✅ Found")
+                    if "gemini" in st.secrets and "GOOGLE_API_KEY" in st.secrets["gemini"]:
+                        st.write("**API Key:**", "✅ Found")
+                    elif "GOOGLE_API_KEY" in st.secrets:
+                        st.write("**API Key:**", "✅ Found")
+                    else:
+                        st.write("**API Key:**", "❌ Missing")
                 except:
-                    st.write("**API Key:**", "❌ Missing")
+                    st.write("**API Key:**", "❌ Error")
                     
 # ===== SIDEBAR =====
 
@@ -1150,6 +1157,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
