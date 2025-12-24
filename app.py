@@ -601,7 +601,7 @@ if st.session_state.logged_in and st.session_state.agent is None and st.session_
         
         # 1. Try accessing as a dictionary (Most reliable on Cloud)
         if "GOOGLE_API_KEY" in st.secrets:
-            google_api_key = st.secrets["GOOGLE_API_KEY"]
+            google_api_key = st.secrets["gemini"]["GOOGLE_API_KEY"]
         # 2. Try accessing as an attribute
         elif hasattr(st.secrets, "GOOGLE_API_KEY"):
             google_api_key = st.secrets.GOOGLE_API_KEY
@@ -1150,6 +1150,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
