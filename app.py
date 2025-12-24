@@ -13,6 +13,14 @@ from auth import UserAuth, init_session_state, logout
 
 load_dotenv()
 
+def is_streamlit():
+    """Check if running in Streamlit environment"""
+    try:
+        import streamlit as st
+        return hasattr(st, "secrets")
+    except:
+        return False
+
 st.set_page_config(
     page_title="Lumina Travel Planner", 
     page_icon="✈", 
@@ -276,8 +284,8 @@ if 'user' not in st.session_state:
 def get_available_routes():
     """Get all available flight routes from database"""
     try:
-        if st.session_state.agent and st.session_state.agent.db:
-            db = st.session_state.agent.db
+        if st.session_state.db:
+            db = st.session_state.db
             db.cursor.execute("""
                 SELECT DISTINCT from_city, to_city, COUNT(*) as flight_count
                 FROM flights
@@ -454,6 +462,9 @@ def show_login_page():
 
 # ===== DATABASE & AUTH INITIALIZATION =====
 
+if 'db' not in st.session_state:
+    st.session_state.db = None
+
 if 'auth' not in st.session_state:
     st.session_state.auth = None
     
@@ -474,54 +485,37 @@ if 'auth' not in st.session_state:
                 """Initialize database connection (cached)"""
                 print("get_db() called")
                 try:
-                    # Check if secrets exist
-                    try:
-                        import streamlit as st
-                        if hasattr(st, 'secrets') and 'neon' in st.secrets:
-                            print("Streamlit secrets found")
-                            print(f"   Host: {st.secrets['neon'].get('host', 'MISSING')}")
-                            print(f"   Database: {st.secrets['neon'].get('database', 'MISSING')}")
-                            print(f"   User: {st.secrets['neon'].get('user', 'MISSING')}")
-                        else:
-                            print("Streamlit secrets NOT found")
-                            st.error("Database secrets not configured in Streamlit Cloud!")
-                            return None
-                    except Exception as secret_error:
-                        print(f"Error checking secrets: {secret_error}")
-                        return None
-                    
                     print("🔧 Creating TravelDatabase instance...")
                     db = TravelDatabase()
                     print("TravelDatabase instance created")
                     
                     # Verify connection
                     if db.is_connected():
-                        print("Database connected and healthy")
+                        print("✅ Database connected and healthy")
                         return db
                     else:
-                        print("Database not connected")
+                        print("❌ Database not connected")
                         st.error("Database connection failed!")
                         return None
                         
                 except Exception as e:
-                    print(f"Database initialization error: {e}")
+                    print(f"❌ Database initialization error: {e}")
                     import traceback
                     traceback.print_exc()
                     st.error(f"Database error: {str(e)}")
                     return None
             
-            # Get database instance
+            # Get database instance and store in session state
             print("Calling get_db()...")
-            db = get_db()
-            print(f"get_db() returned: {db is not None}")
+            st.session_state.db = get_db()
+            print(f"get_db() returned: {st.session_state.db is not None}")
             
             # Initialize auth system
-            if db and db.conn:
+            if st.session_state.db and st.session_state.db.conn:
                 try:
                     print("🔧 Initializing UserAuth...")
-                    st.session_state.auth = UserAuth(db.conn)
+                    st.session_state.auth = UserAuth(st.session_state.db.conn)
                     print("✅ Auth system initialized")
-                    st.success("✅ Connected to database!")
                 except Exception as e:
                     print(f"❌ Auth init error: {e}")
                     import traceback
@@ -544,33 +538,47 @@ if 'auth' not in st.session_state:
         print("❌ Components not available")
         st.error("⚠️ Required components not available")
 # ===== AGENT INITIALIZATION =====
-
 @st.cache_resource
-def init_agent():
+def init_agent(_db):
     """Initialize AI agent (cached)"""
     try:
-        google_api_key = os.getenv("GOOGLE_API_KEY")
+        # Try Streamlit secrets first, then fall back to environment variable
+        google_api_key = None
+        
+        if is_streamlit():
+            try:
+                google_api_key = st.secrets.get("GOOGLE_API_KEY")
+                print(f"✅ Google API Key loaded from Streamlit secrets")
+            except:
+                pass
+        
         if not google_api_key:
-            print("GOOGLE_API_KEY not found")
+            google_api_key = os.getenv("GOOGLE_API_KEY")
+            print(f"✅ Google API Key loaded from environment")
+        
+        if not google_api_key:
+            print("❌ GOOGLE_API_KEY not found")
+            st.error("⚠️ Google API Key not configured!")
             return None
             
         print("Initializing AI agent...")
         agent = TravelAgent(google_api_key=google_api_key)
-        print("AI agent initialized")
+        agent.db = _db  # Attach database to agent
+        print("✅ AI agent initialized with database")
         return agent
         
     except Exception as e:
-        print(f"Agent initialization failed: {e}")
+        print(f"❌ Agent initialization failed: {e}")
         import traceback
         traceback.print_exc()
         return None
 
-# Initialize agent
-if COMPONENTS_AVAILABLE and st.session_state.agent is None:
-    st.session_state.agent = init_agent()
+# Initialize agent with database
+if COMPONENTS_AVAILABLE and st.session_state.agent is None and st.session_state.db:
+    st.session_state.agent = init_agent(st.session_state.db)
 
 # Load available routes
-if st.session_state.agent and not st.session_state.available_routes:
+if st.session_state.db and not st.session_state.available_routes:
     st.session_state.available_routes = get_available_routes()
 
 # ===== LOGIN CHECK =====
@@ -622,9 +630,9 @@ with st.sidebar:
                 pass
     
     # Database Stats
-    if st.session_state.agent and st.session_state.agent.db:
+    if st.session_state.db:
         try:
-            stats = st.session_state.agent.db.get_database_stats()
+            stats = st.session_state.db.get_database_stats()
             st.success("Connected")
             st.markdown(f"""
             <div style="padding: 1rem; background: #f8fafc; border-radius: 10px; margin-bottom: 1rem; border: 1px solid #e2e8f0;">
@@ -840,7 +848,7 @@ if st.session_state.page == 'overview':
         if st.button("Generate Trip Plan", key="generate_trip"):
             if from_city == to_city:
                 st.error("Please select different cities")
-            elif not st.session_state.agent or not st.session_state.agent.db:
+            elif not st.session_state.agent or not st.session_state.db:
                 st.error("Agent/Database not initialized")
             else:
                 # Check route before generating
@@ -864,7 +872,34 @@ if st.session_state.page == 'overview':
                         }
                         
                         # Get data from database
-                        trip_data = st.session_state.agent.get_structured_data(from_city, to_city, budget)
+                        if st.session_state.db:
+                            # Map budget to star ratings
+                            budget_map = {
+                                'Budget': (0, 3),
+                                'Moderate': (3, 4),
+                                'Luxury': (4, 5)
+                            }
+                            min_stars, max_stars = budget_map.get(budget, (0, 5))
+                            
+                            flights = st.session_state.db.get_flights(from_city, to_city, limit=10)
+                            hotels = st.session_state.db.get_hotels(to_city, min_stars=min_stars, limit=10)
+                            places = st.session_state.db.get_places(to_city, min_rating=4.0, limit=20)
+                            
+                            # Add amenities_list for hotels
+                            for hotel in hotels:
+                                if hotel.get('amenities'):
+                                    hotel['amenities_list'] = hotel['amenities'].split(',')
+                                else:
+                                    hotel['amenities_list'] = []
+                            
+                            trip_data = {
+                                'flights': flights,
+                                'hotels': hotels,
+                                'places': places
+                            }
+                        else:
+                            trip_data = {'flights': [], 'hotels': [], 'places': []}
+                        
                         st.session_state.trip_data = trip_data
                         
                         # Build query
@@ -909,11 +944,12 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                                 'itinerary': trip_data,
                                 'agent_response': ai_response
                             }
-                            # Use save_user_trip instead of save_trip_history
-                            st.session_state.agent.db.save_user_trip(
-                                st.session_state.user['user_id'],  # Pass user_id
-                                trip_record
-                            )
+                            # Use save_user_trip
+                            if st.session_state.db:
+                                st.session_state.db.save_user_trip(
+                                    st.session_state.user['user_id'],
+                                    trip_record
+                                )
                         except Exception as e:
                             st.warning(f"Could not save trip: {str(e)}")
                         
@@ -1061,6 +1097,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
