@@ -11,6 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, initialize_agent, AgentType
 from langchain.memory import ConversationBufferMemory
 from langchain.tools import Tool
+from decimal import Decimal
 
 from tenacity import (
     retry, 
@@ -157,7 +158,7 @@ Format cleanly. Be specific with numbers and names from the data.""",
             if flights:
                 result += f"✈️ FLIGHTS ({from_city} → {to_city}):\n"
                 for i, f in enumerate(flights[:3], 1):
-                    result += f"{i}. {f['airline']} - ₹{f['price']:,}\n"
+                    result += f"{i}. {f['airline']} - ₹{float(f['price']):,.0f}\n"
                     result += f"   Departure: {f['departure_time']} | Arrival: {f['arrival_time']}\n"
                 result += "\n"
             else:
@@ -201,12 +202,12 @@ Format cleanly. Be specific with numbers and names from the data.""",
                 result += f"⚠️ No attractions found in {to_city}\n\n"
             
             # 4. Budget calculation
-            avg_flight = sum(f['price'] for f in flights[:2]) / 2 if len(flights) >= 2 else 5000
-            avg_hotel = sum(h['price_per_night'] for h in hotels[:2]) / 2 if len(hotels) >= 2 else 2500
+            avg_flight = sum(float(f['price']) for f in flights[:2]) / 2
+            avg_hotel = sum(float(h['price_per_night']) for h in hotels[:2]) / 2
             
             result += f"💰 BUDGET ESTIMATE ({budget_level.title()}):\n"
-            result += f"Round-trip Flights: ₹{(avg_flight * 2 * budget_multiplier):,.0f}\n"
-            result += f"Hotel per night: ₹{(avg_hotel * budget_multiplier):,.0f}\n"
+            result += f"Round-trip Flights: ₹{float(avg_flight) * 2 * budget_multiplier:,.0f}\n"
+            result += f"Hotel per night: ₹{float(avg_hotel) * budget_multiplier:,.0f}\n"
             result += f"Food per day: ₹{(1500 * budget_multiplier):,.0f}\n"
             result += f"Transport per day: ₹{(800 * budget_multiplier):,.0f}\n"
             result += f"\nInterests: {interests}\n"
@@ -294,6 +295,7 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"❌ Error: {e}")
+
 
 
 
