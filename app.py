@@ -501,13 +501,6 @@ def show_login_page():
         <small>By signing up, you agree to our Terms of Service and Privacy Policy</small>
     </div>
     """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; color: #64748b; padding: 1rem;">
-        <small>By signing up, you agree to our Terms of Service and Privacy Policy</small>
-    </div>
-    """, unsafe_allow_html=True)
 
 # ===== DATABASE & AUTH INITIALIZATION =====
 if 'db' not in st.session_state:
@@ -1213,6 +1206,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
