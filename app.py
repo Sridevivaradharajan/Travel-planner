@@ -1016,33 +1016,54 @@ Provide complete itinerary with flights, hotels, places, and budget."""
 """
                             st.session_state.ai_response = ai_response
                         
-                        # Save
+                        # Save trip with detailed error handling
                         try:
+                            # Calculate estimated budget
+                            avg_flight = sum(safe_float(f.get('price', 0)) for f in flights[:3]) / max(len(flights[:3]), 1) if flights else 0
+                            avg_hotel = sum(safe_float(h.get('price_per_night', 0)) for h in hotels[:3]) / max(len(hotels[:3]), 1) if hotels else 0
+                            estimated_budget = float((avg_flight * 2) + (avg_hotel * duration) + (2000 * duration))
+                            
+                            # Prepare trip record with proper data types
                             trip_record = {
                                 'source_city': from_city,
                                 'destination_city': to_city,
-                                'start_date': start_date,
-                                'end_date': end_date,
-                                'duration_days': duration,
-                                'total_budget': None,
-                                'itinerary': trip_data,
-                                'agent_response': ai_response
+                                'start_date': start_date.strftime('%Y-%m-%d'),  # Convert to string
+                                'end_date': end_date.strftime('%Y-%m-%d'),      # Convert to string
+                                'duration_days': int(duration),
+                                'total_budget': estimated_budget,
+                                'itinerary': trip_data,  # Pass as dict, database.py will handle JSON conversion
+                                'agent_response': ai_response[:10000] if ai_response else ''  # Truncate if too long
                             }
-                            # Use save_user_trip
-                            if st.session_state.db:
-                                st.session_state.db.save_user_trip(
+                            
+                            # Save with detailed logging
+                            if st.session_state.db and st.session_state.user:
+                                print(f"💾 [APP] Saving trip for user_id: {st.session_state.user['user_id']}")
+                                print(f"💾 [APP] Trip data: {from_city} → {to_city}, {duration} days")
+                                
+                                result = st.session_state.db.save_user_trip(
                                     st.session_state.user['user_id'],
                                     trip_record
                                 )
+                                
+                                if result:
+                                    print("✅ [APP] Trip saved successfully!")
+                                    st.success("✅ Trip saved to your history!")
+                                else:
+                                    print("❌ [APP] Trip save returned False")
+                                    st.warning("⚠️ Trip generated but not saved to history")
+                            else:
+                                print(f"❌ [APP] Cannot save - DB exists: {st.session_state.db is not None}, User exists: {st.session_state.user is not None}")
+                                if st.session_state.user:
+                                    print(f"    User ID: {st.session_state.user.get('user_id', 'MISSING')}")
+                                st.warning("⚠️ Trip generated but not saved (database or user error)")
+                                
                         except Exception as e:
-                            st.warning(f"Could not save trip: {str(e)}")
-                        
-                        st.success("Trip plan generated successfully!")
-                        st.session_state.page = 'itinerary'
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"Error generating trip: {str(e)}")
+                            print(f"❌ [APP] Trip save error: {str(e)}")
+                            print(f"    Error type: {type(e).__name__}")
+                            import traceback
+                            print("Full traceback:")
+                            traceback.print_exc()
+                            st.error(f"⚠️ Could not save trip: {str(e)}")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
@@ -1192,6 +1213,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
