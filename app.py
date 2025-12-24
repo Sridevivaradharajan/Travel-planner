@@ -636,6 +636,31 @@ if not st.session_state.logged_in:
     show_login_page()
     st.stop()
 
+# ===== AGENT INITIALIZATION AFTER LOGIN =====
+# Only initialize agent AFTER successful login
+if st.session_state.logged_in and st.session_state.agent is None and st.session_state.db and COMPONENTS_AVAILABLE:
+    try:
+        print("🔧 POST-LOGIN: Initializing agent...")
+        
+        # Get API key
+        google_api_key = None
+        if is_streamlit():
+            google_api_key = st.secrets.get("GOOGLE_API_KEY")
+        if not google_api_key:
+            google_api_key = os.getenv("GOOGLE_API_KEY")
+        
+        if google_api_key:
+            from agent import TravelAgent
+            st.session_state.agent = TravelAgent(google_api_key=google_api_key)
+            st.session_state.agent.db = st.session_state.db
+            print("✅ POST-LOGIN: Agent initialized successfully!")
+        else:
+            print("❌ POST-LOGIN: No API key found")
+    except Exception as e:
+        print(f"❌ POST-LOGIN: Agent init failed: {e}")
+        import traceback
+        traceback.print_exc()
+
 # ===== DEBUG PANEL =====
 if st.session_state.logged_in:
     with st.sidebar:
@@ -1160,6 +1185,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
