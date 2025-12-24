@@ -572,7 +572,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ===== AGENT INITIALIZATION AFTER LOGIN =====
-# ===== AGENT INITIALIZATION AFTER LOGIN =====
+# Only initialize agent AFTER successful login
 if st.session_state.logged_in and st.session_state.agent is None and st.session_state.db and COMPONENTS_AVAILABLE:
     print("=" * 50)
     print("🔧 POST-LOGIN: Initializing agent...")
@@ -582,14 +582,13 @@ if st.session_state.logged_in and st.session_state.agent is None and st.session_
         # Get API key from Streamlit secrets
         google_api_key = None
         
-        # FIXED: Properly access secrets
         if is_streamlit():
             try:
-                # Access secrets correctly
+                # FIXED: Use bracket notation instead of .get()
                 google_api_key = st.secrets["GOOGLE_API_KEY"]
-                print(f"✅ API Key found (length: {len(google_api_key)})")
+                print(f"✅ API Key found in secrets (length: {len(google_api_key)})")
             except KeyError:
-                print("❌ GOOGLE_API_KEY not in secrets")
+                print("❌ GOOGLE_API_KEY not found in secrets")
             except Exception as e:
                 print(f"❌ Error reading secrets: {e}")
         
@@ -612,12 +611,13 @@ if st.session_state.logged_in and st.session_state.agent is None and st.session_
             st.session_state.agent.db = st.session_state.db
             
             print("✅ AGENT FULLY INITIALIZED!")
+            st.success("🤖 AI Agent initialized successfully!", icon="✅")
             
     except Exception as e:
         print(f"❌ AGENT INITIALIZATION FAILED: {e}")
         import traceback
         traceback.print_exc()
-        st.error(f"Failed to initialize agent: {str(e)}")
+        st.error(f"Failed to initialize AI agent: {str(e)}")
         
 # ===== DEBUG PANEL =====
 if st.session_state.logged_in:
@@ -629,9 +629,12 @@ if st.session_state.logged_in:
             st.write("**Agent:**", "✅ Ready" if st.session_state.agent else "❌ Failed")
             
             if is_streamlit():
-                has_api = 'GOOGLE_API_KEY' in st.secrets
-                st.write("**API Key:**", "✅ Found" if has_api else "❌ Missing")
-
+                try:
+                    has_api = st.secrets["GOOGLE_API_KEY"]
+                    st.write("**API Key:**", "✅ Found")
+                except:
+                    st.write("**API Key:**", "❌ Missing")
+                    
 # ===== SIDEBAR =====
 
 with st.sidebar:
@@ -1143,6 +1146,7 @@ elif st.session_state.page == 'chat':
                 if st.session_state.agent:
                     st.session_state.agent.reset_memory()
                 st.rerun()
+
 
 
 
