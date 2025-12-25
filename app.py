@@ -354,6 +354,19 @@ def safe_float(value):
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+        
+def serialize_trip_data(data):
+    """Convert trip data to JSON-serializable format"""
+    if isinstance(data, dict):
+        return {k: serialize_trip_data(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [serialize_trip_data(item) for item in data]
+    elif isinstance(data, datetime):
+        return data.strftime('%Y-%m-%d %H:%M:%S')
+    elif isinstance(data, Decimal):
+        return float(data)
+    else:
+        return data
 
 def check_route_availability(from_city, to_city):
     """Check if direct flight exists in the pre-loaded routes"""
@@ -921,6 +934,11 @@ if st.session_state.page == 'overview':
                             hotels = st.session_state.db.get_hotels(to_city, min_stars=min_stars, limit=10)
                             places = st.session_state.db.get_places(to_city, min_rating=4.0, limit=20)
                             
+                            # Serialize all data to handle datetime and Decimal objects
+                            flights = serialize_trip_data(flights)
+                            hotels = serialize_trip_data(hotels)
+                            places = serialize_trip_data(places)
+                            
                             # Add amenities_list for hotels
                             for hotel in hotels:
                                 if hotel.get('amenities'):
@@ -1026,15 +1044,17 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                                 'agent_response': ai_response[:10000]
                             }
                 
-                            if st.session_state.db and st.session_state.user:
-                                st.session_state.db.save_user_trip(
-                                    st.session_state.user['user_id'],
-                                    trip_record
-                                )
-                                st.success("✅ Trip saved to history")
-                
-                        except Exception as save_error:
+                          if st.session_state.db and st.session_state.user:
+                            st.session_state.db.save_user_trip(
+                                st.session_state.user['user_id'],
+                                trip_record
+                            )
+                            st.success("✅ Trip saved to history!")
+                            st.rerun()  # Only rerun if save was successful
+                        
+                          except Exception as save_error:
                             st.error(f"❌ Save failed: {save_error}")
+                            st.warning("Trip plan generated but not saved to history")
                         
                         st.rerun()
                         
@@ -1189,6 +1209,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
