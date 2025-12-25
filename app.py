@@ -1028,12 +1028,7 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                             st.session_state.ai_response = ai_response
                         
                         # ------------------ SAVE TRIP ------------------
-                        try:
-                            avg_flight = sum(safe_float(f.get('price', 0)) for f in flights[:3]) / max(len(flights[:3]), 1) if flights else 0
-                            avg_hotel = sum(safe_float(h.get('price_per_night', 0)) for h in hotels[:3]) / max(len(hotels[:3]), 1) if hotels else 0
-                            estimated_budget = float((avg_flight * 2) + (avg_hotel * duration) + (2000 * duration))
-                
-                            trip_record = {
+                        trip_record = {
                                 'source_city': from_city,
                                 'destination_city': to_city,
                                 'start_date': start_date.strftime('%Y-%m-%d'),
@@ -1044,17 +1039,18 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                                 'agent_response': ai_response[:10000]
                             }
                 
-                          if st.session_state.db and st.session_state.user:
-                            st.session_state.db.save_user_trip(
-                                st.session_state.user['user_id'],
-                                trip_record
-                            )
-                            st.success("✅ Trip saved to history!")
-                            st.rerun()  # Only rerun if save was successful
+                            if st.session_state.db and st.session_state.user:
+                                st.session_state.db.save_user_trip(
+                                    st.session_state.user['user_id'],
+                                    trip_record
+                                )
+                                st.success("✅ Trip saved to history!")
+                                st.rerun()  # Only rerun if save was successful
                         
-                          except Exception as save_error:
+                    except Exception as save_error:
                             st.error(f"❌ Save failed: {save_error}")
                             st.warning("Trip plan generated but not saved to history")
+                            # Don't rerun on save error - let user see the error
                         
                         st.rerun()
                         
@@ -1209,6 +1205,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
