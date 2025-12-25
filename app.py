@@ -984,7 +984,7 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                 
                 # Add error handling for agent
                 try:
-                    st.info("🤖 AI Agent is planning your trip...")
+                    st.info("AI Agent is planning your trip...")
                     ai_response = st.session_state.agent.plan_trip(query)
                     
                     # Validate response
@@ -1206,6 +1206,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
