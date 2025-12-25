@@ -893,71 +893,71 @@ if st.session_state.page == 'overview':
         
         members = st.number_input("Travelers", min_value=1, max_value=10, value=2)
         if st.button("Generate Trip Plan", key="generate_trip"):
-            if from_city == to_city:
-                st.error("Please select different cities")
-            elif not st.session_state.agent or not st.session_state.db:
-                st.error("Agent/Database not initialized")
-            else:
-                # Check route before generating
-                has_flights = check_route_availability(from_city, to_city)
+    if from_city == to_city:
+        st.error("Please select different cities")
+    elif not st.session_state.agent or not st.session_state.db:
+        st.error("Agent/Database not initialized")
+    else:
+        # Check route before generating
+        has_flights = check_route_availability(from_city, to_city)
+        
+        with st.spinner('Creating your personalized trip plan...'):
+            try:
+                duration = (end_date - start_date).days
+                interests_str = ", ".join(interests) if interests else "sightseeing"
                 
-                with st.spinner('Creating your personalized trip plan...'):
-                    try:
-                        duration = (end_date - start_date).days
-                        interests_str = ", ".join(interests) if interests else "sightseeing"
-                        
-                        st.session_state.form_data = {
-                            'from_city': from_city,
-                            'to_city': to_city,
-                            'start_date': start_date,
-                            'end_date': end_date,
-                            'duration': duration,
-                            'style': style,
-                            'budget': budget,
-                            'interests': interests_str,
-                            'amenities': ', '.join(amenities) if amenities else 'WiFi',
-                            'members': members
-                        }
-                        
-                        # Get data from database
-                        if st.session_state.db:
-                            # Map budget to star ratings
-                            budget_map = {
-                                'Budget': (0, 3),
-                                'Moderate': (3, 4),
-                                'Luxury': (4, 5)
-                            }
-                            min_stars, max_stars = budget_map.get(budget, (0, 5))
-                            
-                            flights = st.session_state.db.get_flights(from_city, to_city, limit=10)
-                            hotels = st.session_state.db.get_hotels(to_city, min_stars=min_stars, limit=10)
-                            places = st.session_state.db.get_places(to_city, min_rating=4.0, limit=20)
-                            
-                            # Serialize all data to handle datetime and Decimal objects
-                            flights = serialize_trip_data(flights)
-                            hotels = serialize_trip_data(hotels)
-                            places = serialize_trip_data(places)
-                            
-                            # Add amenities_list for hotels
-                            for hotel in hotels:
-                                if hotel.get('amenities'):
-                                    hotel['amenities_list'] = hotel['amenities'].split(',')
-                                else:
-                                    hotel['amenities_list'] = []
-                            
-                            trip_data = {
-                                'flights': flights,
-                                'hotels': hotels,
-                                'places': places
-                            }
+                st.session_state.form_data = {
+                    'from_city': from_city,
+                    'to_city': to_city,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'duration': duration,
+                    'style': style,
+                    'budget': budget,
+                    'interests': interests_str,
+                    'amenities': ', '.join(amenities) if amenities else 'WiFi',
+                    'members': members
+                }
+                
+                # Get data from database
+                if st.session_state.db:
+                    # Map budget to star ratings
+                    budget_map = {
+                        'Budget': (0, 3),
+                        'Moderate': (3, 4),
+                        'Luxury': (4, 5)
+                    }
+                    min_stars, max_stars = budget_map.get(budget, (0, 5))
+                    
+                    flights = st.session_state.db.get_flights(from_city, to_city, limit=10)
+                    hotels = st.session_state.db.get_hotels(to_city, min_stars=min_stars, limit=10)
+                    places = st.session_state.db.get_places(to_city, min_rating=4.0, limit=20)
+                    
+                    # Serialize all data to handle datetime and Decimal objects
+                    flights = serialize_trip_data(flights)
+                    hotels = serialize_trip_data(hotels)
+                    places = serialize_trip_data(places)
+                    
+                    # Add amenities_list for hotels
+                    for hotel in hotels:
+                        if hotel.get('amenities'):
+                            hotel['amenities_list'] = hotel['amenities'].split(',')
                         else:
-                            trip_data = {'flights': [], 'hotels': [], 'places': []}
-                        
-                        st.session_state.trip_data = trip_data
-                        
-                        # Build query
-                        if not has_flights:
-                            query = f"""Create a {duration}-day {style.lower()} trip plan from {from_city} to {to_city}.
+                            hotel['amenities_list'] = []
+                    
+                    trip_data = {
+                        'flights': flights,
+                        'hotels': hotels,
+                        'places': places
+                    }
+                else:
+                    trip_data = {'flights': [], 'hotels': [], 'places': []}
+                
+                st.session_state.trip_data = trip_data
+                
+                # Build query
+                if not has_flights:
+                    query = f"""Create a {duration}-day {style.lower()} trip plan from {from_city} to {to_city}.
 
 IMPORTANT: There are NO direct flights from {from_city} to {to_city} in the database.
 Please suggest:
@@ -1207,6 +1207,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
