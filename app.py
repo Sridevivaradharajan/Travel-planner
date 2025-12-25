@@ -1051,12 +1051,17 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                                 )
                                 st.success("✅ Trip saved to history!")
                       except Exception as save_error:
-                        st.error(f"❌ Save failed: {save_error}")
-                        st.warning("Trip plan generated but not saved to history")
+                            st.error(f"❌ Save failed: {save_error}")
+                            st.warning("Trip plan generated but not saved to history")
+                    
+                    st.rerun()
                 
-                st.rerun()
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # Close form-card div
+                except Exception as e:
+                    st.error(f"❌ Trip generation failed: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 with col_preview:
     
@@ -1206,6 +1211,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
