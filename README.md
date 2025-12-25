@@ -1,4 +1,4 @@
-# AI Travel Planner App
+# Agentic AI Travel Planner App
 
 ## Overview
 
