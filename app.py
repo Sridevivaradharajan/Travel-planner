@@ -971,8 +971,8 @@ Travelers: {members}
 Interests: {interests_str}
 
 Use search_all_travel_data: {from_city}|{to_city}|{budget.lower()}|{interests_str}"""
-                else:
-                    query = f"""Create a {duration}-day {style.lower()} trip from {from_city} to {to_city}.
+                        else:
+                            query = f"""Create a {duration}-day {style.lower()} trip from {from_city} to {to_city}.
 
 Budget: {budget}
 Travelers: {members}
@@ -1206,6 +1206,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
