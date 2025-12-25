@@ -1056,10 +1056,10 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                     
                         st.rerun()
                 
-                except Exception as e:
-                    st.error(f"❌ Trip generation failed: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+                  except Exception as e:
+                        st.error(f"❌ Trip generation failed: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
         
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1211,6 +1211,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
