@@ -1050,11 +1050,11 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                                     trip_record
                                 )
                                 st.success("✅ Trip saved to history!")
-                      except Exception as save_error:
+                       except Exception as save_error:
                             st.error(f"❌ Save failed: {save_error}")
                             st.warning("Trip plan generated but not saved to history")
                     
-                    st.rerun()
+                       st.rerun()
                 
                 except Exception as e:
                     st.error(f"❌ Trip generation failed: {e}")
@@ -1211,6 +1211,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
