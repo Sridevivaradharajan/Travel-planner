@@ -903,7 +903,6 @@ if st.session_state.page == 'overview':
                 has_flights = check_route_availability(from_city, to_city)
                 
                 with st.spinner('Creating your personalized trip plan...'):
-                    try:
                         duration = (end_date - start_date).days
                         interests_str = ", ".join(interests) if interests else "sightseeing"
                         
@@ -1207,6 +1206,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
