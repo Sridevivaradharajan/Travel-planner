@@ -892,7 +892,175 @@ if st.session_state.page == 'overview':
             default=["WiFi"])
         
         members = st.number_input("Travelers", min_value=1, max_value=10, value=2)
+        if st.button("Generate Trip Plan", key="generate_trip"):
+    if from_city == to_city:
+        st.error("Please select different cities")
+    elif not st.session_state.agent or not st.session_state.db:
+        st.error("Agent/Database not initialized")
+    else:
+        # Check route before generating
+        has_flights = check_route_availability(from_city, to_city)
         
+        with st.spinner('Creating your personalized trip plan...'):
+            try:
+                duration = (end_date - start_date).days
+                interests_str = ", ".join(interests) if interests else "sightseeing"
+                
+                st.session_state.form_data = {
+                    'from_city': from_city,
+                    'to_city': to_city,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'duration': duration,
+                    'style': style,
+                    'budget': budget,
+                    'interests': interests_str,
+                    'amenities': ', '.join(amenities) if amenities else 'WiFi',
+                    'members': members
+                }
+                
+                # Get data from database
+                if st.session_state.db:
+                    # Map budget to star ratings
+                    budget_map = {
+                        'Budget': (0, 3),
+                        'Moderate': (3, 4),
+                        'Luxury': (4, 5)
+                    }
+                    min_stars, max_stars = budget_map.get(budget, (0, 5))
+                    
+                    flights = st.session_state.db.get_flights(from_city, to_city, limit=10)
+                    hotels = st.session_state.db.get_hotels(to_city, min_stars=min_stars, limit=10)
+                    places = st.session_state.db.get_places(to_city, min_rating=4.0, limit=20)
+                    
+                    # Serialize all data to handle datetime and Decimal objects
+                    flights = serialize_trip_data(flights)
+                    hotels = serialize_trip_data(hotels)
+                    places = serialize_trip_data(places)
+                    
+                    # Add amenities_list for hotels
+                    for hotel in hotels:
+                        if hotel.get('amenities'):
+                            hotel['amenities_list'] = hotel['amenities'].split(',')
+                        else:
+                            hotel['amenities_list'] = []
+                    
+                    trip_data = {
+                        'flights': flights,
+                        'hotels': hotels,
+                        'places': places
+                    }
+                else:
+                    trip_data = {'flights': [], 'hotels': [], 'places': []}
+                
+                st.session_state.trip_data = trip_data
+                
+                # Build query
+                if not has_flights:
+                    query = f"""Create a {duration}-day {style.lower()} trip plan from {from_city} to {to_city}.
+
+IMPORTANT: There are NO direct flights from {from_city} to {to_city} in the database.
+Please suggest:
+1. Alternative connecting routes
+2. Other transportation options
+3. Hotels in {to_city} (data available)
+4. Places to visit in {to_city} (data available)
+
+Budget: {budget}
+Travelers: {members}
+Interests: {interests_str}
+
+Use search_all_travel_data: {from_city}|{to_city}|{budget.lower()}|{interests_str}"""
+                else:
+                    query = f"""Create a {duration}-day {style.lower()} trip from {from_city} to {to_city}.
+
+Budget: {budget}
+Travelers: {members}
+Interests: {interests_str}
+
+Use search_all_travel_data: {from_city}|{to_city}|{budget.lower()}|{interests_str}
+
+Provide complete itinerary with flights, hotels, places, and budget."""
+                
+                # Add error handling for agent
+                try:
+                    st.info("🤖 AI Agent is planning your trip...")
+                    ai_response = st.session_state.agent.plan_trip(query)
+                    
+                    # Validate response
+                    if not ai_response or not isinstance(ai_response, str):
+                        raise ValueError("Invalid agent response")
+                    
+                    st.session_state.ai_response = ai_response
+                    
+                except Exception as agent_error:
+                    st.error(f"❌ Agent Error: {str(agent_error)}")
+                    st.warning("Creating fallback itinerary...")
+                    
+                    # Create fallback response
+                    ai_response = f"""# {duration}-Day Trip: {from_city} → {to_city}
+
+## Trip Overview
+- **Duration:** {duration} days ({start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')})
+- **Budget Category:** {budget}
+- **Travelers:** {members} person(s)
+- **Travel Style:** {style}
+- **Interests:** {interests_str}
+
+## Transportation
+{'⚠️ No direct flights available. Consider connecting flights or alternative transport.' if not has_flights else f'✈️ {len(flights)} direct flight options available'}
+
+## Accommodation
+🏨 {len(hotels)} hotel options found in {to_city}
+
+## Attractions
+🎯 {len(places)} places to visit in {to_city}
+
+## Next Steps
+1. Check the **Itinerary tab** for detailed options
+2. Compare flight and hotel prices
+3. Review attraction ratings and descriptions
+4. Use the **Chat Assistant** for personalized recommendations
+
+*Note: This is a basic itinerary. For personalized recommendations, please check your agent configuration.*
+"""
+                    st.session_state.ai_response = ai_response
+                
+                # ------------------ SAVE TRIP ------------------
+                # Calculate estimated budget
+                avg_flight = sum(safe_float(f.get('price', 0)) for f in flights[:3]) / max(len(flights[:3]), 1) if flights else 0
+                avg_hotel = sum(safe_float(h.get('price_per_night', 0)) for h in hotels[:3]) / max(len(hotels[:3]), 1) if hotels else 0
+                estimated_budget = (avg_flight * 2) + (avg_hotel * duration) + (2000 * duration)
+                
+                trip_record = {
+                    'source_city': from_city,
+                    'destination_city': to_city,
+                    'start_date': start_date.strftime('%Y-%m-%d'),
+                    'end_date': end_date.strftime('%Y-%m-%d'),
+                    'duration_days': duration,
+                    'total_budget': estimated_budget,
+                    'itinerary': trip_data,
+                    'agent_response': ai_response[:10000]
+                }
+                
+                try:
+                    if st.session_state.db and st.session_state.user:
+                        st.session_state.db.save_user_trip(
+                            st.session_state.user['user_id'],
+                            trip_record
+                        )
+                        st.success("✅ Trip saved to history!")
+                except Exception as save_error:
+                    st.error(f"❌ Save failed: {save_error}")
+                    st.warning("Trip plan generated but not saved to history")
+                
+                st.rerun()
+        
+            except Exception as e:
+                st.error(f"❌ Trip generation failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+                
     with col_preview:
         if st.session_state.trip_data:
             st.markdown("### Quick Preview")
@@ -1038,6 +1206,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
