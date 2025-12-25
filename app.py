@@ -1028,36 +1028,32 @@ Provide complete itinerary with flights, hotels, places, and budget."""
                             st.session_state.ai_response = ai_response
                         
                         # ------------------ SAVE TRIP ------------------
+                        # Calculate estimated budget
+                        avg_flight = sum(safe_float(f.get('price', 0)) for f in flights[:3]) / max(len(flights[:3]), 1) if flights else 0
+                        avg_hotel = sum(safe_float(h.get('price_per_night', 0)) for h in hotels[:3]) / max(len(hotels[:3]), 1) if hotels else 0
+                        estimated_budget = (avg_flight * 2) + (avg_hotel * duration) + (2000 * duration)
+                        
                         trip_record = {
-                                'source_city': from_city,
-                                'destination_city': to_city,
-                                'start_date': start_date.strftime('%Y-%m-%d'),
-                                'end_date': end_date.strftime('%Y-%m-%d'),
-                                'duration_days': duration,
-                                'total_budget': estimated_budget,
-                                'itinerary': trip_data,
-                                'agent_response': ai_response[:10000]
-                            }
-                
+                            'source_city': from_city,
+                            'destination_city': to_city,
+                            'start_date': start_date.strftime('%Y-%m-%d'),
+                            'end_date': end_date.strftime('%Y-%m-%d'),
+                            'duration_days': duration,
+                            'total_budget': estimated_budget,
+                            'itinerary': trip_data,
+                            'agent_response': ai_response[:10000]
+                        }
+                        
+                        try:
                             if st.session_state.db and st.session_state.user:
                                 st.session_state.db.save_user_trip(
                                     st.session_state.user['user_id'],
                                     trip_record
                                 )
                                 st.success("✅ Trip saved to history!")
-                                st.rerun()  # Only rerun if save was successful
-                        
-                    except Exception as save_error:
+                        except Exception as save_error:
                             st.error(f"❌ Save failed: {save_error}")
                             st.warning("Trip plan generated but not saved to history")
-                            # Don't rerun on save error - let user see the error
-                        
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"❌ Trip generation failed: {e}")
-                        import traceback
-                        st.code(traceback.format_exc())
     
     with col_preview:
         if st.session_state.trip_data:
@@ -1205,6 +1201,7 @@ elif st.session_state.page == 'chat':
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+
 
 
 
