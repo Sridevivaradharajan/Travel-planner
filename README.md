@@ -66,8 +66,16 @@ pip install -r requirements.txt
 Create a `.env` file:
 
 ```env
-API_KEY=your_llm_api_key
-DATABASE_URL=your_database_url
+# LLM Configuration
+LLM_API_KEY=your_llm_api_key
+
+# Database Configuration (Credential-based)
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=travel_planner
+DB_USER=postgres
+DB_PASSWORD=your_password
+
 ```
 
 ---
