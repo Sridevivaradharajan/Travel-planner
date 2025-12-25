@@ -1,4 +1,4 @@
-# ✈️ AI Travel Planner App
+# AI Travel Planner App
 
 ## Overview
 
