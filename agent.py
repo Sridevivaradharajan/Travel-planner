@@ -363,9 +363,9 @@ Error: {str(e)[:200]}"""
             return f"Error planning trip: {str(e)}\n\nPlease try rephrasing your request or contact support."
     
     def chat(self, message: str) -> str:
-        """Chat about existing trip plan
+        """Chat about existing trip plan - DIRECT ANSWERS without unnecessary tool calls
         
-        FIX: Ensures message is always a string
+        FIX: Ensures message is always a string and uses direct LLM for simple questions
         """
         try:
             # ========== CRITICAL FIX: ENSURE STRING INPUT ==========
@@ -373,6 +373,17 @@ Error: {str(e)[:200]}"""
                 message = ensure_string(message)
             # =======================================================
             
+            # Check if this is a trip planning request or a simple question
+            trip_keywords = ['plan', 'trip', 'itinerary', 'create', 'book', 'suggest trip', 'organize']
+            is_trip_planning = any(keyword in message.lower() for keyword in trip_keywords)
+            
+            # For simple questions, use LLM directly without tools
+            if not is_trip_planning:
+                from langchain.schema import HumanMessage
+                response = self.llm.invoke([HumanMessage(content=message)])
+                return response.content
+            
+            # For trip planning, use the full agent with tools
             response = self.agent_executor.invoke({"input": message})
             return response.get("output", "No response generated")
         except Exception as e:
