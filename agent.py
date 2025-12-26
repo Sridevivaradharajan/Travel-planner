@@ -361,11 +361,14 @@ Error: {str(e)[:200]}"""
             error_details = traceback.format_exc()
             print(f"Error in plan_trip: {error_details}")
             return f"Error planning trip: {str(e)}\n\nPlease try rephrasing your request or contact support."
-    
-    def chat(self, message: str) -> str:
+        
+    def chat(self, message: str, trip_context: dict = None) -> str:
         """Chat about existing trip plan - DIRECT ANSWERS without unnecessary tool calls
         
         FIX: Ensures message is always a string and uses direct LLM for simple questions
+        Args:
+            message: User's chat message
+            trip_context: Optional dict with current trip data (flights, hotels, places)
         """
         try:
             # ========== CRITICAL FIX: ENSURE STRING INPUT ==========
@@ -374,13 +377,35 @@ Error: {str(e)[:200]}"""
             # =======================================================
             
             # Check if this is a trip planning request or a simple question
-            trip_keywords = ['plan', 'trip', 'itinerary', 'create', 'book', 'suggest trip', 'organize']
+            trip_keywords = ['plan a trip', 'create trip', 'book trip', 'organize trip', 'plan my trip']
             is_trip_planning = any(keyword in message.lower() for keyword in trip_keywords)
             
             # For simple questions, use LLM directly without tools
             if not is_trip_planning:
-                from langchain.schema import HumanMessage
-                response = self.llm.invoke([HumanMessage(content=message)])
+                # Build context-aware prompt
+                context_prompt = "You are Lumina, a helpful AI travel assistant. Answer the user's question directly and conversationally."
+                
+                # Add trip context if available
+                if trip_context:
+                    flights = trip_context.get('flights', [])
+                    hotels = trip_context.get('hotels', [])
+                    places = trip_context.get('places', [])
+                    
+                    if flights or hotels or places:
+                        context_prompt += "\n\nCurrent trip context:"
+                        if flights:
+                            context_prompt += f"\n- {len(flights)} flight options available"
+                        if hotels:
+                            context_prompt += f"\n- {len(hotels)} hotel options available"
+                        if places:
+                            context_prompt += f"\n- {len(places)} places to visit"
+                
+                messages = [
+                    SystemMessage(content=context_prompt),
+                    HumanMessage(content=message)
+                ]
+                
+                response = self.llm.invoke(messages)
                 return response.content
             
             # For trip planning, use the full agent with tools
@@ -471,3 +496,4 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         print(f"❌ Error: {traceback.format_exc()}")
+
