@@ -1,7 +1,7 @@
 """
 Travel Planning AI Agent - Fixed Version
 Compatible with PostgreSQL Database and Gemini Flash
-Fixes: DateTime serialization, Agent format errors, Better error handling
+Fixes: DateTime serialization, Agent format errors, Better error handling, LIST INPUT BUG
 """
 import os
 from typing import List, Dict
@@ -61,6 +61,19 @@ def prepare_for_json(data):
     elif isinstance(data, (list, tuple)):
         return [prepare_for_json(item) for item in data]
     return data
+
+
+def ensure_string(value):
+    """Convert any value to string safely - FIX FOR LIST INPUT BUG"""
+    if isinstance(value, list):
+        return ", ".join(str(x) for x in value)
+    elif value is None:
+        return ""
+    elif isinstance(value, (datetime, date)):
+        return value.isoformat()
+    elif isinstance(value, Decimal):
+        return str(float(value))
+    return str(value)
 
 
 class TravelAgent:
@@ -216,19 +229,31 @@ Question: {input}
         )
     
     def _search_all_data(self, query: str) -> str:
-        """Combined search using CORRECT database methods with proper formatting"""
+        """Combined search using CORRECT database methods with proper formatting
+        
+        FIX: Handles both string and list inputs safely
+        """
         if not self.db:
             return "Database not available"
         
         try:
+            # ========== CRITICAL FIX: HANDLE LIST INPUTS ==========
+            # Convert query to string if it's a list
+            if isinstance(query, list):
+                query = "|".join(ensure_string(item) for item in query)
+            elif not isinstance(query, str):
+                query = ensure_string(query)
+            # ======================================================
+            
             parts = query.split("|")
             if len(parts) < 3:
                 return "Invalid format. Use: from_city|to_city|budget_level|interests"
             
-            from_city = parts[0].strip().title()
-            to_city = parts[1].strip().title()
-            budget_level = parts[2].strip().lower()
-            interests = parts[3].strip() if len(parts) > 3 else ""
+            # Safely convert each part to string
+            from_city = ensure_string(parts[0]).strip().title()
+            to_city = ensure_string(parts[1]).strip().title()
+            budget_level = ensure_string(parts[2]).strip().lower()
+            interests = ensure_string(parts[3]).strip() if len(parts) > 3 else ""
             
             result = []
             
@@ -311,8 +336,16 @@ Question: {input}
         stop=stop_after_attempt(2)
     )
     def plan_trip(self, user_query: str) -> str:
-        """Plan trip with rate limiting and better error handling"""
+        """Plan trip with rate limiting and better error handling
+        
+        FIX: Ensures user_query is always a string
+        """
         try:
+            # ========== CRITICAL FIX: ENSURE STRING INPUT ==========
+            if not isinstance(user_query, str):
+                user_query = ensure_string(user_query)
+            # =======================================================
+            
             response = self.agent_executor.invoke({"input": user_query})
             return response.get("output", "No response generated")
             
@@ -330,8 +363,16 @@ Error: {str(e)[:200]}"""
             return f"Error planning trip: {str(e)}\n\nPlease try rephrasing your request or contact support."
     
     def chat(self, message: str) -> str:
-        """Chat about existing trip plan"""
+        """Chat about existing trip plan
+        
+        FIX: Ensures message is always a string
+        """
         try:
+            # ========== CRITICAL FIX: ENSURE STRING INPUT ==========
+            if not isinstance(message, str):
+                message = ensure_string(message)
+            # =======================================================
+            
             response = self.agent_executor.invoke({"input": message})
             return response.get("output", "No response generated")
         except Exception as e:
@@ -419,4 +460,3 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         print(f"❌ Error: {traceback.format_exc()}")
-
