@@ -372,8 +372,12 @@ Error: {str(e)[:200]}"""
         """
         try:
             # ========== CRITICAL FIX: ENSURE STRING INPUT ==========
-            if not isinstance(message, str):
-                message = ensure_string(message)
+            if isinstance(message, list):
+                message = " ".join(str(x) for x in message)
+            elif message is None:
+                message = ""
+            else:
+                message = str(message)
             # =======================================================
             
             # Check if this is a trip planning request or a simple question
@@ -382,6 +386,8 @@ Error: {str(e)[:200]}"""
             
             # For simple questions, use LLM directly without tools
             if not is_trip_planning:
+                from langchain.schema import HumanMessage, SystemMessage
+                
                 # Build context-aware prompt
                 context_prompt = "You are Lumina, a helpful AI travel assistant. Answer the user's question directly and conversationally."
                 
@@ -398,7 +404,8 @@ Error: {str(e)[:200]}"""
                         if hotels:
                             context_prompt += f"\n- {len(hotels)} hotel options available"
                         if places:
-                            context_prompt += f"\n- {len(places)} places to visit"
+                            places_summary = ", ".join([p.get('name', 'Unknown') for p in places[:5]])
+                            context_prompt += f"\n- {len(places)} places to visit including: {places_summary}"
                 
                 messages = [
                     SystemMessage(content=context_prompt),
@@ -412,6 +419,8 @@ Error: {str(e)[:200]}"""
             response = self.agent_executor.invoke({"input": message})
             return response.get("output", "No response generated")
         except Exception as e:
+            import traceback
+            print(f"Chat error: {traceback.format_exc()}")
             return f"Error: {str(e)}"
     
     def get_structured_data(self, from_city: str, to_city: str, budget: str) -> Dict:
@@ -496,4 +505,5 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         print(f"❌ Error: {traceback.format_exc()}")
+
 
