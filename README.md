@@ -112,6 +112,3 @@ streamlit run app.py
 * Demonstrates operational use of agentic AI beyond prototypes
 * Applies AI to real-world consumer problems
 * Highlights intelligent decision-support systems in travel tech
-
-* Add **architecture diagram text**
-* Customize it for **Agent.ai / HackerEarth submission**
