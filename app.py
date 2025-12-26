@@ -1206,3 +1206,4 @@ elif st.session_state.page == 'chat':
                     st.rerun() 
                 except Exception as e: 
                     st.error(f"Error: {str(e)}")
+
