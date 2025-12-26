@@ -1201,9 +1201,12 @@ elif st.session_state.page == 'chat':
              
             with st.spinner("Thinking..."): 
                 try: 
-                    response = st.session_state.agent.chat(user_input) 
+                    # Pass current trip context to chat for better answers
+                    trip_context = st.session_state.trip_data if st.session_state.trip_data else None
+                    response = st.session_state.agent.chat(user_input, trip_context=trip_context) 
                     st.session_state.chat_history.append({'role': 'assistant', 'content': response}) 
                     st.rerun() 
                 except Exception as e: 
                     st.error(f"Error: {str(e)}")
+
 
